@@ -1786,7 +1786,7 @@
 	"Schedule": "Schema",
 	"Scheduled time must be in the future": "Schemalagd tid måste ligga i framtiden",
 	"Scroll On Branch Change": "Scrolla vid grenbyte",
-	"Scroll to Top": "Rulla högst upp",
+	"Scroll During Generation": "",
 	"Search": "Sök",
 	"Search a model": "Sök efter en modell",
 	"Search all emojis": "Sök alla emojis",

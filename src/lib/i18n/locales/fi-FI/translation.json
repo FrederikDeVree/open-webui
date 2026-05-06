@@ -1786,7 +1786,7 @@
 	"Schedule": "Aikataulu",
 	"Scheduled time must be in the future": "Aikataulutetun ajan on oltava tulevaisuudessa",
 	"Scroll On Branch Change": "Vieritä haaran vaihtoon",
-	"Scroll to Top": "Vieritä ylös",
+	"Scroll During Generation": "",
 	"Search": "Haku",
 	"Search a model": "Hae mallia",
 	"Search all emojis": "Hae emojeista",

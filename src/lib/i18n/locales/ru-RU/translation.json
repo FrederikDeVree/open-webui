@@ -1798,7 +1798,7 @@
 	"Schedule": "Расписание",
 	"Scheduled time must be in the future": "Запланированное время должно быть в будущем",
 	"Scroll On Branch Change": "Прокручивать при изменении ветки",
-	"Scroll to Top": "Прокрутить наверх",
+	"Scroll During Generation": "Прокручивать во время генерации",
 	"Search": "Поиск",
 	"Search a model": "Поиск по моделям",
 	"Search all emojis": "Поиск по всем эмодзи",
