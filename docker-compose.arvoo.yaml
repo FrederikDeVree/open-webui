@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: open-webui
     container_name: open-webui
     volumes:
       - open-webui:/app/backend/data
@@ -15,4 +16,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  open-webui: {}
+  open-webui:
+    name: open-webui
