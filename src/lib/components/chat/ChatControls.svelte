@@ -98,12 +98,9 @@
 		showControls.set(true);
 	}
 
-	// Auto-open Files tab when a terminal is selected (suppress panel open when full-screen)
+	// Auto-switch to Files tab when a terminal is selected (do not open the pane automatically)
 	$: if ($selectedTerminalId && showFilesTab) {
 		activeTab = 'files';
-		if (largeScreen) {
-			showControls.set(true);
-		}
 	}
 
 	// Clear selected direct terminal if user lost permission
