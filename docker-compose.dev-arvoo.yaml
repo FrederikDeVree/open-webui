@@ -1,3 +1,5 @@
+name: open-webui-dev
+
 services:
   open-webui:
     build:
