@@ -16,6 +16,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  open-webui:
-    name: open-webui
-    external: true
+  open-webui-dev:
+    name: open-webui-dev
