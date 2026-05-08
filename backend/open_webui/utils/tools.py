@@ -1133,6 +1133,18 @@ async def get_terminal_tools(
             'type': 'terminal',
         }
 
+    # Append file-path instruction so the AI produces clickable download links.
+    # Paths wrapped in backticks (e.g. `/workspace/output.csv`) are automatically
+    # rendered as download buttons in the Open WebUI chat interface.
+    FILE_PATH_INSTRUCTION = (
+        'When you create or save a file, always mention its exact full path wrapped in backticks '
+        '(e.g. `/workspace/output.csv`) so it becomes a clickable download link for the user.'
+    )
+    if system_prompt:
+        system_prompt = f'{system_prompt}\n\n{FILE_PATH_INSTRUCTION}'
+    else:
+        system_prompt = FILE_PATH_INSTRUCTION
+
     return tools_dict, system_prompt
 
 
