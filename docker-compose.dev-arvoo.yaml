@@ -20,3 +20,4 @@ services:
 volumes:
   open-webui-dev:
     name: open-webui-dev
+    external: true
