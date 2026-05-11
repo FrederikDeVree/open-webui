@@ -62,7 +62,7 @@ from open_webui.utils.session_pool import (
 )
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
-from open_webui.utils.headers import include_user_info_headers
+from open_webui.utils.headers import include_user_info_headers, get_custom_headers
 from open_webui.utils.anthropic import is_anthropic_url, get_anthropic_models
 
 log = logging.getLogger(__name__)
@@ -215,7 +215,8 @@ async def get_headers_and_cookies(
         headers['Authorization'] = f'Bearer {token}'
 
     if config.get('headers') and isinstance(config.get('headers'), dict):
-        headers = {**headers, **config.get('headers')}
+        custom_headers = get_custom_headers(config.get('headers'), user, metadata)
+        headers.update(custom_headers)
 
     return headers, cookies
 
@@ -439,6 +440,7 @@ async def get_all_models_responses(request: Request, user: UserModel) -> list:
             connection_type = api_config.get('connection_type', 'external')
             prefix_id = api_config.get('prefix_id', None)
             tags = api_config.get('tags', [])
+            provider = api_config.get('provider', '')
 
             model_list = response if isinstance(response, list) else response.get('data', [])
             if not isinstance(model_list, list):
@@ -458,6 +460,9 @@ async def get_all_models_responses(request: Request, user: UserModel) -> list:
 
                 if connection_type:
                     model['connection_type'] = connection_type
+
+                if provider:
+                    model['provider'] = provider
 
     log.debug(f'get_all_models:responses() {responses}')
     return responses
@@ -486,6 +491,7 @@ async def get_filtered_models(models, user, db=None):
             if user.id == model_info.user_id or model_info.id in accessible_model_ids:
                 filtered_models.append(model)
     return filtered_models
+
 
 
 @cached(
@@ -542,19 +548,29 @@ async def get_all_models(request: Request, user: UserModel) -> dict[str, list]:
                         continue
 
                     if model_id and model_id not in models:
-                        models[model_id] = {
+                        merged = {
                             **model,
                             'name': model.get('name', model_id),
                             'owned_by': 'openai',
                             'openai': model,
                             'connection_type': model.get('connection_type', 'external'),
+                            'provider': model.get('provider', ''),
                             'urlIdx': idx,
                         }
+
+                        # llama.cpp router mode: derive loaded state from
+                        # the status object returned by GET /v1/models.
+                        status = model.get('status')
+                        if isinstance(status, dict) and 'value' in status:
+                            merged['loaded'] = status['value'] in ('loaded', 'sleeping')
+
+                        models[model_id] = merged
 
         return models
 
     models = get_merged_models(map(extract_data, responses))
     log.debug(f'models: {models}')
+
 
     request.app.state.OPENAI_MODELS = models
     return {'data': list(models.values())}
@@ -1077,7 +1093,7 @@ async def generate_chat_completion(
 
             payload = apply_model_params_to_body_openai(params, payload)
             if not bypass_system_prompt:
-                payload = apply_system_prompt_to_body(system, payload, metadata, user)
+                payload = await apply_system_prompt_to_body(system, payload, metadata, user)
 
         await check_model_access(user, model_info, bypass_filter)
     else:
