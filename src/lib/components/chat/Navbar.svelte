@@ -7,12 +7,15 @@
 		banners,
 		chatId,
 		config,
+		controlsActiveTab,
 		mobile,
 		settings,
 		showArchivedChats,
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
+		selectedTerminalId,
+		terminalServers,
 		user
 	} from '$lib/stores';
 
@@ -38,6 +41,7 @@
 	import ChatPlus from '../icons/ChatPlus.svelte';
 	import ChatCheck from '../icons/ChatCheck.svelte';
 	import Knobs from '../icons/Knobs.svelte';
+	import FolderOpen from '../icons/FolderOpen.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 	const i18n = getContext('i18n');
@@ -219,6 +223,23 @@
 					{/if}
 
 					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
+						{#if $selectedTerminalId && ($terminalServers ?? []).some((t) => t.id && t.id === $selectedTerminalId)}
+							<Tooltip content={$i18n.t('Files')}>
+								<button
+									class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
+									on:click={async () => {
+										controlsActiveTab.set('files');
+										await showControls.set(true);
+									}}
+									aria-label="Files"
+								>
+									<div class=" m-auto self-center">
+										<FolderOpen className=" size-5" strokeWidth="1" />
+									</div>
+								</button>
+							</Tooltip>
+						{/if}
+
 						<Tooltip content={$i18n.t('Controls')}>
 							<button
 								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
