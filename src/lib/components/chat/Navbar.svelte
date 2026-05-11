@@ -253,7 +253,12 @@
 							<button
 								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
 								on:click={async () => {
-									await showControls.set(!$showControls);
+									if ($showControls && $controlsActiveTab === 'controls') {
+										await showControls.set(false);
+									} else {
+										controlsActiveTab.set('controls');
+										await showControls.set(true);
+									}
 								}}
 								aria-label="Controls"
 							>
