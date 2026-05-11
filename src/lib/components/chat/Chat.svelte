@@ -3011,6 +3011,7 @@
 						bind:selectedModels
 						shareEnabled={!!history.currentId}
 						{initNewChat}
+						{codeInterpreterEnabled}
 						scrollToTop={!isNearTop ? scrollToTop : null}
 						{archiveChatHandler}
 						{deleteChatHandler}

@@ -41,7 +41,6 @@
 	import ChatPlus from '../icons/ChatPlus.svelte';
 	import ChatCheck from '../icons/ChatCheck.svelte';
 	import Knobs from '../icons/Knobs.svelte';
-	import FolderOpen from '../icons/FolderOpen.svelte';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 	const i18n = getContext('i18n');
@@ -60,6 +59,14 @@
 	export let archiveChatHandler: (id: string) => void;
 	export let deleteChatHandler: (id: string) => void;
 	export let moveChatHandler: (id: string, folderId: string) => void;
+	export let codeInterpreterEnabled: boolean = false;
+
+	$: showFilesButton =
+		($selectedTerminalId &&
+			(($terminalServers ?? []).some((t: any) => t.id && t.id === $selectedTerminalId) ||
+				$user?.role === 'admin' ||
+				($user?.permissions?.features?.direct_tool_servers ?? true))) ||
+		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
 
 	let closedBannerIds = [];
 
@@ -222,24 +229,26 @@
 						</Menu>
 					{/if}
 
-					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
-						{#if $selectedTerminalId && ($terminalServers ?? []).some((t) => t.id && t.id === $selectedTerminalId)}
-							<Tooltip content={$i18n.t('Files')}>
-								<button
-									class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
-									on:click={async () => {
-										controlsActiveTab.set('files');
-										await showControls.set(true);
-									}}
-									aria-label="Files"
-								>
-									<div class=" m-auto self-center">
-										<FolderOpen className=" size-5" strokeWidth="1" />
-									</div>
-								</button>
-							</Tooltip>
-						{/if}
+				{#if showFilesButton}
+					<button
+						class="flex cursor-pointer px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {$showControls && $controlsActiveTab === 'files'
+							? 'bg-gray-100 dark:bg-gray-800 font-medium text-gray-900 dark:text-white'
+							: 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}"
+						on:click={async () => {
+							if ($showControls && $controlsActiveTab === 'files') {
+								showControls.set(false);
+							} else {
+								controlsActiveTab.set('files');
+								showControls.set(true);
+							}
+						}}
+						aria-label="Files"
+					>
+						{$i18n.t('Files')}
+					</button>
+				{/if}
 
+				{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
 						<Tooltip content={$i18n.t('Controls')}>
 							<button
 								class=" flex cursor-pointer px-2 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-850 transition"
