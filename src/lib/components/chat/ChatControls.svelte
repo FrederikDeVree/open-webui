@@ -307,6 +307,7 @@
 					<!-- Controls + Files tabs -->
 					<div class="flex flex-col h-full min-h-0">
 						<!-- Tab bar -->
+						{#if showControlsTab}
 						<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
 							<div class="flex gap-1 min-w-0 overflow-x-auto scrollbar-hidden">
 								{#if showControlsTab}
@@ -360,6 +361,7 @@
 								</svg>
 							</button>
 						</div>
+						{/if}
 
 						<div
 							class="flex-1 min-h-0 {activeTab === 'overview'
@@ -453,6 +455,7 @@
 						<!-- Controls + Files tabs -->
 						<div class="flex flex-col h-full min-h-0">
 							<!-- Tab bar -->
+							{#if showControlsTab}
 							<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
 								<div class="flex gap-1 min-w-0 overflow-x-auto scrollbar-hidden">
 									{#if showControlsTab}
@@ -506,6 +509,7 @@
 									</svg>
 								</button>
 							</div>
+							{/if}
 
 							<div
 								class="flex-1 min-h-0 {activeTab === 'overview'
