@@ -368,7 +368,7 @@
 								? 'h-full'
 								: activeTab === 'controls'
 									? 'overflow-y-auto px-3 pt-1'
-									: ''}"
+									: ''} {!showControlsTab ? 'pt-2' : ''}"
 						>
 							{#if activeTab === 'overview'}
 								<Overview
@@ -516,7 +516,7 @@
 									? 'h-full'
 									: activeTab === 'controls'
 										? 'overflow-y-auto px-3 pt-1'
-										: ''}"
+										: ''} {!showControlsTab ? 'pt-2' : ''}"
 							>
 								{#if activeTab === 'overview'}
 									<Overview
