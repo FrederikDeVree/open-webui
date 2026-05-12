@@ -11,7 +11,8 @@
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { copyToClipboard, unescapeHtml } from '$lib/utils';
 	import { downloadPyodideFile, PYODIDE_DOWNLOAD_SCHEME } from '$lib/utils/pyodide';
-	import { downloadTerminalFile, TERMINAL_DOWNLOAD_SCHEME } from '$lib/utils/terminal';
+	import { downloadTerminalFile, TERMINAL_DOWNLOAD_SCHEME, TERMINAL_PATH_RE } from '$lib/utils/terminal';
+	import { terminalServers } from '$lib/stores';
 
 	import Image from '$lib/components/common/Image.svelte';
 	import KatexRenderer from './KatexRenderer.svelte';
@@ -69,6 +70,27 @@
 		}
 		try {
 			const url = new URL(href, window.location.origin);
+			// Check if the link points to a terminal file path:
+			// - same-origin URL whose pathname looks like a terminal file path, or
+			// - a URL whose origin matches a known terminal server
+			const servers = $terminalServers as Array<{ id: string; url: string; key: string }>;
+			const isTerminalServerOrigin = servers.some((s) => {
+				try {
+					return new URL(s.url).origin === url.origin;
+				} catch {
+					return false;
+				}
+			});
+			if (
+				(url.origin === window.location.origin || isTerminalServerOrigin) &&
+				TERMINAL_PATH_RE.test(url.pathname)
+			) {
+				e.preventDefault();
+				downloadTerminalFile(url.pathname).then((ok) => {
+					if (!ok) toast.error($i18n.t('Failed to download file'));
+				});
+				return;
+			}
 			// Check if same origin and an in-app route
 			if (
 				url.origin === window.location.origin &&
