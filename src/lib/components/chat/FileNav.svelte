@@ -1,6 +1,6 @@
 <script context="module">
 	// Persists across mount/unmount cycles (module-level, not per-instance)
-	let savedPath = '/';
+	let savedPath: string | null = null;
 </script>
 
 <script lang="ts">
@@ -87,8 +87,19 @@
 	};
 
 	// ── Directory state ──────────────────────────────────────────────────
-	let currentPath = savedPath;
+	let currentPath = savedPath ?? '/';
 	let entries: FileEntry[] = [];
+
+	// ── Home directory (per terminal connection) ─────────────────────────
+	/** The root of what we allow the user to navigate. null = unconstrained. */
+	let homePath: string | null = null;
+
+	/** Clamp a path so it never goes above homePath. */
+	const clampToHome = (path: string): string => {
+		if (!homePath) return path;
+		if (!path.startsWith(homePath)) return homePath;
+		return path;
+	};
 	let loading = false;
 	let error: string | null = null;
 
@@ -267,7 +278,7 @@
 			if (chatChanged && chatId && !oldChatId) {
 				// Chat just got created (null → real ID): persist the current
 				// browsed path as the new session's cwd — don't re-fetch.
-				setCwd(terminal.url, terminal.key, savedPath, chatId);
+				setCwd(terminal.url, terminal.key, savedPath ?? homePath ?? '/', chatId);
 			} else if (terminalChanged || chatChanged) {
 				// Terminal switched, new chat started, or switched between
 				// existing chats — re-fetch the session cwd.
@@ -278,13 +289,22 @@
 					if (terminalChanged) {
 						const config = await getTerminalConfig(terminal.url, terminal.key);
 						terminalEnabled = config?.features?.terminal !== false;
+						// Re-detect home directory for new terminal
+						const rawHome = await getCwd(terminal.url, terminal.key, undefined);
+						const resolvedHome = rawHome ? normalizePath(rawHome) : null;
+						homePath =
+							resolvedHome && resolvedHome !== '/'
+								? resolvedHome.endsWith('/')
+									? resolvedHome
+									: resolvedHome + '/'
+								: null;
 					}
 
 					const rawCwd = await getCwd(terminal.url, terminal.key, chatId ?? undefined);
 					const cwd = rawCwd ? normalizePath(rawCwd) : null;
-					const dir = cwd ? (cwd.endsWith('/') ? cwd : cwd + '/') : '/';
-					savedPath = dir;
-					loadDir(dir);
+					const dir = cwd ? (cwd.endsWith('/') ? cwd : cwd + '/') : (homePath ?? '/');
+					savedPath = clampToHome(dir);
+					loadDir(savedPath);
 				})();
 			}
 		}
@@ -305,7 +325,21 @@
 	/** Normalize Windows backslashes to forward slashes. */
 	const normalizePath = (p: string) => p.replace(/\\/g, '/');
 
-	const buildBreadcrumbs = (path: string) => {
+	const buildBreadcrumbs = (path: string, home: string | null = null) => {
+		// When under a known home dir, show ~ as root and only show the relative parts
+		if (home && path.startsWith(home)) {
+			const rel = path.slice(home.length);
+			const parts = rel.split('/').filter(Boolean);
+			const root = { label: '~', path: home };
+			return parts.reduce(
+				(acc, part) => {
+					const prev = acc[acc.length - 1];
+					acc.push({ label: part, path: `${prev.path}${part}/` });
+					return acc;
+				},
+				[root]
+			);
+		}
 		const parts = path.split('/').filter(Boolean);
 		const isDrive = /^[A-Za-z]:$/.test(parts[0] ?? '');
 		const root = isDrive ? { label: parts[0], path: `${parts[0]}/` } : { label: '/', path: '/' };
@@ -348,6 +382,8 @@
 	const loadDir = async (path: string) => {
 		const terminal = selectedTerminal;
 		if (!terminal) return;
+
+		path = clampToHome(path);
 
 		loading = true;
 		error = null;
@@ -833,13 +869,23 @@
 			const config = await getTerminalConfig(terminal.url, terminal.key);
 			terminalEnabled = config?.features?.terminal !== false;
 
-			if (chatId || savedPath === '/') {
+			// Detect the user's home directory (global server default, no session)
+			const rawHome = await getCwd(terminal.url, terminal.key, undefined);
+			const resolvedHome = rawHome ? normalizePath(rawHome) : null;
+			homePath =
+				resolvedHome && resolvedHome !== '/'
+					? resolvedHome.endsWith('/')
+						? resolvedHome
+						: resolvedHome + '/'
+					: null;
+
+			if (chatId || savedPath === null) {
 				// Fetch session-specific cwd from the server (or global default for new chats)
 				const rawCwd = await getCwd(terminal.url, terminal.key, chatId ?? undefined);
 				const cwd = rawCwd ? normalizePath(rawCwd) : null;
 				if (cwd) savedPath = cwd.endsWith('/') ? cwd : cwd + '/';
 			}
-			loadDir(savedPath);
+			loadDir(clampToHome(savedPath ?? homePath ?? '/'));
 		}
 
 		mounted = true;
@@ -940,7 +986,7 @@
 
 		{#if previewPort === null}
 			<FileNavToolbar
-				breadcrumbs={buildBreadcrumbs(currentPath)}
+				breadcrumbs={buildBreadcrumbs(currentPath, homePath)}
 				{selectedFile}
 				{loading}
 				{canGoBack}
