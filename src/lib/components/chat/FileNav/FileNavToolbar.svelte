@@ -55,7 +55,7 @@
 	<!-- Back -->
 	<Tooltip content={$i18n.t('Back')}>
 		<button
-			class="shrink-0 p-1.5 rounded transition {canGoBack
+			class="shrink-0 p-1 rounded transition {canGoBack
 				? 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200'
 				: 'text-gray-300 dark:text-gray-600 cursor-default'}"
 			on:click={onGoBack}
@@ -66,7 +66,7 @@
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 20 20"
 				fill="currentColor"
-				class="size-7"
+				class="size-3.5"
 			>
 				<path
 					fill-rule="evenodd"
@@ -80,7 +80,7 @@
 	<!-- Forward -->
 	<Tooltip content={$i18n.t('Forward')}>
 		<button
-			class="shrink-0 p-1.5 rounded transition {canGoForward
+			class="shrink-0 p-1 rounded transition {canGoForward
 				? 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200'
 				: 'text-gray-300 dark:text-gray-600 cursor-default'}"
 			on:click={onGoForward}
@@ -91,7 +91,7 @@
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 20 20"
 				fill="currentColor"
-				class="size-7"
+				class="size-3.5"
 			>
 				<path
 					fill-rule="evenodd"
@@ -154,7 +154,7 @@
 
 	<Tooltip content={$i18n.t('Refresh')}>
 		<button
-			class="shrink-0 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+			class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
 			on:click={onRefresh}
 			aria-label={$i18n.t('Refresh')}
 		>
@@ -162,7 +162,7 @@
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox="0 0 20 20"
 				fill="currentColor"
-				class="size-7 {loading ? 'animate-spin' : ''}"
+				class="size-3.5 {loading ? 'animate-spin' : ''}"
 			>
 				<path
 					fill-rule="evenodd"
@@ -177,7 +177,7 @@
 		<!-- Select toggle -->
 		<Tooltip content={selectionMode ? $i18n.t('Cancel selection') : $i18n.t('Select')}>
 			<button
-				class="shrink-0 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition
+				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition
 					{selectionMode
 					? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
 					: 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}"
@@ -189,7 +189,7 @@
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 20 20"
 					fill="currentColor"
-					class="size-7"
+					class="size-3.5"
 				>
 					<path
 						fill-rule="evenodd"
@@ -204,7 +204,7 @@
 		{#if selectedCount > 0}
 			<Tooltip content={$i18n.t('Delete selected ({{count}})', { count: selectedCount })}>
 				<button
-					class="shrink-0 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+					class="shrink-0 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
 					on:click={onDeleteSelected}
 					aria-label={$i18n.t('Delete selected')}
 				>
@@ -212,7 +212,7 @@
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 20 20"
 						fill="currentColor"
-						class="size-7"
+						class="size-3.5"
 					>
 						<path
 							fill-rule="evenodd"
@@ -227,14 +227,14 @@
 		<Dropdown align="end" sideOffset={4}>
 			<Tooltip content={$i18n.t('Sort')}>
 				<button
-					class="shrink-0 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+					class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
 					aria-label={$i18n.t('Sort')}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 20 20"
 						fill="currentColor"
-						class="size-7"
+						class="size-3.5"
 					>
 						<path
 							d="M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h7.508a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .75.75v6.69l1.72-1.72a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06l1.72 1.72V7.75A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75h4.562a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"
@@ -298,25 +298,25 @@
 		</Dropdown>
 		<Tooltip content={$i18n.t('New Folder')}>
 			<button
-				class="shrink-0 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
 				on:click={onNewFolder}
 				aria-label={$i18n.t('New Folder')}
 			>
-				<NewFolderAlt className="size-7" />
+				<NewFolderAlt className="size-3.5" />
 			</button>
 		</Tooltip>
 		<Tooltip content={$i18n.t('New File')}>
 			<button
-				class="shrink-0 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
 				on:click={onNewFile}
 				aria-label={$i18n.t('New File')}
 			>
-				<FilePlusAlt className="size-7" />
+				<FilePlusAlt className="size-3.5" />
 			</button>
 		</Tooltip>
 		<Tooltip content={$i18n.t('Download')}>
 			<button
-				class="shrink-0 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
 				on:click={onDownloadDir}
 				aria-label={$i18n.t('Download')}
 			>
@@ -324,7 +324,7 @@
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 20 20"
 					fill="currentColor"
-					class="size-7"
+					class="size-3.5"
 				>
 					<path
 						d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"
@@ -338,7 +338,7 @@
 		<Dropdown align="end" sideOffset={4}>
 			<Tooltip content={$i18n.t('Upload')}>
 				<button
-					class="shrink-0 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+					class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
 					aria-label={$i18n.t('Upload')}
 				>
 					<svg
@@ -347,7 +347,7 @@
 						fill="none"
 						stroke="currentColor"
 						stroke-width="1.5"
-						class="size-7"
+						class="size-3.5"
 					>
 						<path
 							stroke-linecap="round"
