@@ -538,6 +538,34 @@
 		isDragOver = true;
 	};
 
+	/** Recursively collect all File objects from a FileSystemEntry tree. */
+	const collectEntryFiles = (entry: any, prefix = ''): Promise<File[]> => {
+		if (entry.isFile) {
+			return new Promise((resolve) => {
+				entry.file((f: File) => {
+					// Preserve relative path within the dropped folder
+					const relativeName = prefix ? `${prefix}/${f.name}` : f.name;
+					resolve([new File([f], relativeName, { type: f.type })]);
+				});
+			});
+		}
+		return new Promise((resolve) => {
+			const reader = entry.createReader();
+			const results: File[] = [];
+			const readAll = () => {
+				reader.readEntries(async (batch: any[]) => {
+					if (!batch.length) return resolve(results);
+					const folderName = prefix ? `${prefix}/${entry.name}` : entry.name;
+					for (const child of batch) {
+						results.push(...(await collectEntryFiles(child, folderName)));
+					}
+					readAll();
+				});
+			};
+			readAll();
+		});
+	};
+
 	const handleDrop = async (e: DragEvent) => {
 		e.preventDefault();
 		e.stopPropagation();
@@ -546,13 +574,22 @@
 		const terminal = selectedTerminal;
 		if (selectedFile || !terminal) return;
 
-		const droppedFiles = Array.from(e.dataTransfer?.files ?? []);
-		if (!droppedFiles.length) return;
+		const items = Array.from(e.dataTransfer?.items ?? []);
+		let files: File[] = [];
+
+		if (items.length > 0) {
+			const entries = items.map((i) => i.webkitGetAsEntry()).filter(Boolean);
+			for (const entry of entries) {
+				files.push(...(await collectEntryFiles(entry)));
+			}
+		} else {
+			files = Array.from(e.dataTransfer?.files ?? []);
+		}
+
+		if (!files.length) return;
 
 		uploading = true;
-		for (const file of droppedFiles) {
-			await uploadToTerminal(terminal.url, terminal.key, currentPath, file, chatId ?? undefined);
-		}
+		await uploadToTerminal(terminal.url, terminal.key, currentPath, files, chatId ?? undefined);
 		uploading = false;
 		await loadDir(currentPath);
 	};
@@ -562,9 +599,7 @@
 		if (!files.length || !terminal) return;
 
 		uploading = true;
-		for (const file of files) {
-			await uploadToTerminal(terminal.url, terminal.key, currentPath, file, chatId ?? undefined);
-		}
+		await uploadToTerminal(terminal.url, terminal.key, currentPath, files, chatId ?? undefined);
 		uploading = false;
 		await loadDir(currentPath);
 	};
@@ -754,6 +789,14 @@
 
 	const enterSelectionMode = () => {
 		selectionMode = true;
+	};
+
+	const toggleSelectionMode = () => {
+		if (selectionMode) {
+			clearSelection(); // also resets selectionMode = false
+		} else {
+			selectionMode = true;
+		}
 	};
 
 	const bulkDelete = async () => {
@@ -993,6 +1036,8 @@
 				{canGoForward}
 				{sortBy}
 				{sortAsc}
+				{selectionMode}
+				selectedCount={selectedCount}
 				onGoBack={goBack}
 				onGoForward={goForward}
 				onNavigate={loadDir}
@@ -1010,6 +1055,13 @@
 				onDownloadDir={() => downloadFile(currentPath)}
 				onMove={handleMove}
 				onSort={toggleSort}
+				onToggleSelection={toggleSelectionMode}
+				onDeleteSelected={() => {
+					if (selectedCount > 0) {
+						deleteTarget = { path: '__bulk__', name: `${selectedCount} items` };
+						showDeleteConfirm = true;
+					}
+				}}
 			>
 				{#if fileImageUrl !== null || (fileOfficeSlides !== null && fileOfficeSlides.length > 0)}
 					<Tooltip content={$i18n.t('Reset view')}>
