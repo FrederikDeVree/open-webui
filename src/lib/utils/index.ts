@@ -1846,7 +1846,11 @@ export const renderMermaidDiagram = async (
 		const parseResult = await mermaid.parse(code, { suppressErrors: false });
 		if (parseResult) {
 			const { svg } = await mermaid.render(id, code);
-			return svg;
+			// Remove fixed width/height so the diagram scales to fill its container
+			// while viewBox preserves the aspect ratio.
+			return svg
+				.replace(/\s+width="[^"]*"/, ' width="100%"')
+				.replace(/\s+height="[^"]*"/, '');
 		}
 		return '';
 	} finally {
