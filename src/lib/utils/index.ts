@@ -1842,18 +1842,23 @@ export const renderMermaidDiagram = async (
 	renderId?: string
 ) => {
 	const id = renderId ?? `mermaid-${uuidv4()}`;
+	// Attach a temporary off-screen container with an explicit width so that
+	// dimension-sensitive diagrams (e.g. gantt charts) can read a meaningful
+	// clientWidth during rendering. Without this, mermaid collapses the chart
+	// to ~300 px and the time-axis tick intervals become wrong.
+	const container = document.createElement('div');
+	container.style.cssText =
+		'position:fixed;top:-9999px;left:-9999px;width:800px;visibility:hidden;';
+	document.body.appendChild(container);
 	try {
 		const parseResult = await mermaid.parse(code, { suppressErrors: false });
 		if (parseResult) {
-			const { svg } = await mermaid.render(id, code);
-			// Remove fixed width/height so the diagram scales to fill its container
-			// while viewBox preserves the aspect ratio.
-			return svg
-				.replace(/\s+width="[^"]*"/, ' width="100%"')
-				.replace(/\s+height="[^"]*"/, '');
+			const { svg } = await mermaid.render(id, code, container);
+			return svg;
 		}
 		return '';
 	} finally {
+		container.remove();
 		// Mermaid can leave temporary d*/i* wrappers on error paths.
 		cleanupMermaidTempElements(id);
 	}
