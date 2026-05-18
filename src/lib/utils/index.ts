@@ -1848,7 +1848,7 @@ export const renderMermaidDiagram = async (
 	// to ~300 px and the time-axis tick intervals become wrong.
 	const container = document.createElement('div');
 	container.style.cssText =
-		'position:fixed;top:-9999px;left:-9999px;width:800px;visibility:hidden;';
+		'position:fixed;top:-9999px;left:-9999px;width:1100px;visibility:hidden;';
 	document.body.appendChild(container);
 	try {
 		const parseResult = await mermaid.parse(code, { suppressErrors: false });
