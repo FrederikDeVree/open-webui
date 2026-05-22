@@ -1567,13 +1567,28 @@
 		if (res !== null && res.messages) {
 			// Update chat history with the new messages
 			for (const message of res.messages) {
-				history.messages[message.id] = {
-					...history.messages[message.id],
-					...(history.messages[message.id].content !== message.content
-						? { originalContent: history.messages[message.id].content }
-						: {}),
-					...message
-				};
+				if (history.messages[message.id]) {
+					history.messages[message.id] = {
+						...history.messages[message.id],
+						...(history.messages[message.id].content !== message.content
+							? { originalContent: history.messages[message.id].content }
+							: {}),
+						...message
+					};
+				} else {
+					// New message (e.g. sibling created by an action)
+					history.messages[message.id] = message;
+					if (message.parentId && history.messages[message.parentId]) {
+						const parent = history.messages[message.parentId];
+						if (!parent.childrenIds.includes(message.id)) {
+							parent.childrenIds = [...parent.childrenIds, message.id];
+						}
+					}
+					// Auto-navigate to the new message if it's a leaf node
+					if (!message.childrenIds || message.childrenIds.length === 0) {
+						history.currentId = message.id;
+					}
+				}
 			}
 		}
 
