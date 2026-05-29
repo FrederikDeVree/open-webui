@@ -63,7 +63,7 @@
 	} from '$lib/utils/connections';
 
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL, WEBUI_HOSTNAME } from '$lib/constants';
-	import { bestMatchingLanguage, displayFileHandler, getUserTimezone } from '$lib/utils';
+	import { bestMatchingLanguage, displayFileHandler, getUserTimezone, initMermaid, renderMermaidDiagram, renderVegaVisualization, svgToPng } from '$lib/utils';
 	import { setTextScale } from '$lib/utils/text-scale';
 
 	import NotificationToast from '$lib/components/NotificationToast.svelte';
@@ -426,6 +426,39 @@
 		}
 	};
 
+	let mermaidInstance = null;
+
+	const executeDiagram = async (data, cb) => {
+		const { lang, code } = data;
+		try {
+			let svg = '';
+			if (lang === 'mermaid') {
+				if (!mermaidInstance) {
+					mermaidInstance = await initMermaid();
+				}
+				svg = await renderMermaidDiagram(mermaidInstance, code);
+			} else if (lang === 'vega' || lang === 'vega-lite') {
+				svg = await renderVegaVisualization(code);
+			} else {
+				if (cb) cb({ error: `Unsupported diagram language: ${lang}` });
+				return;
+			}
+
+			let png = '';
+			try {
+				png = await svgToPng(svg);
+			} catch (pngErr) {
+				console.warn('SVG to PNG conversion failed, skipping visual feedback:', pngErr);
+			}
+
+			if (cb) cb({ svg, png });
+		} catch (err) {
+			console.error('Diagram rendering error:', err);
+			const errorMsg = err instanceof Error ? err.message : String(err);
+			if (cb) cb({ error: errorMsg });
+		}
+	};
+
 	const chatEventHandler = async (event, cb) => {
 		const chat = $page.url.pathname.includes(`/c/${event.chat_id}`);
 
@@ -494,6 +527,10 @@
 			} else if (type === 'execute:tool') {
 				console.log('execute:tool', data);
 				executeTool(data, cb, event.chat_id);
+				return;
+			} else if (type === 'execute:diagram') {
+				console.log('execute:diagram', data);
+				executeDiagram(data, cb);
 				return;
 			} else if (type === 'request:chat:completion') {
 				console.log(data, $socket.id);

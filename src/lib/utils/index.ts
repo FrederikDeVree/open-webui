@@ -1877,6 +1877,37 @@ export const renderVegaVisualization = async (spec: string, i18n?: any) => {
 	return svg;
 };
 
+/**
+ * Convert an SVG string to a PNG data URI via an off-screen canvas.
+ */
+export const svgToPng = (svgString: string, scale = 2): Promise<string> => {
+	return new Promise((resolve, reject) => {
+		const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+		const url = URL.createObjectURL(svgBlob);
+		const img = new Image();
+		img.onload = () => {
+			const canvas = document.createElement('canvas');
+			canvas.width = img.naturalWidth * scale;
+			canvas.height = img.naturalHeight * scale;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) {
+				URL.revokeObjectURL(url);
+				reject(new Error('Could not get canvas 2d context'));
+				return;
+			}
+			ctx.scale(scale, scale);
+			ctx.drawImage(img, 0, 0);
+			URL.revokeObjectURL(url);
+			resolve(canvas.toDataURL('image/png'));
+		};
+		img.onerror = () => {
+			URL.revokeObjectURL(url);
+			reject(new Error('Failed to load SVG into image'));
+		};
+		img.src = url;
+	});
+};
+
 export const getCodeBlockContents = (content: string): object => {
 	// Strip thinking/reasoning and other detail blocks before extracting code
 	// to prevent code inside <details type="reasoning"> from being treated as artifacts

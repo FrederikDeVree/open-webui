@@ -591,6 +591,35 @@ def serialize_output(output: list) -> str:
                     f'<details type="code_interpreter" done="false"{output_attr}>\n<summary>Analyzing…</summary>\n{display}\n</details>'
                 )
 
+        elif item_type == 'open_webui:diagram_renderer':
+            # Diagram renderer — similar to code_interpreter but for mermaid/vega diagrams.
+            content = '\n'.join(parts)
+            content_stripped, original_whitespace = split_content_and_whitespace(content)
+            if is_opening_code_block(content_stripped):
+                content = content_stripped.rstrip('`').rstrip() + original_whitespace
+            else:
+                content = content_stripped + original_whitespace
+            parts = [content] if content else []
+
+            lang = item.get('lang', 'mermaid')
+            status = item.get('status', 'in_progress')
+            duration = item.get('duration')
+            svg = item.get('svg', '')
+            error = item.get('error', '')
+            is_last_item = idx == len(output) - 1
+
+            svg_attr = f' svg="{html.escape(svg)}"' if svg else ''
+            error_attr = f' error="{html.escape(error)}"' if error else ''
+
+            if status == 'completed' or duration is not None or not is_last_item:
+                parts.append(
+                    f'<details type="diagram_renderer" done="true" lang="{lang}" duration="{duration or 0}"{svg_attr}{error_attr}>\n<summary>Drew diagram</summary>\n</details>'
+                )
+            else:
+                parts.append(
+                    f'<details type="diagram_renderer" done="false" lang="{lang}"{svg_attr}{error_attr}>\n<summary>Drawing diagram…</summary>\n</details>'
+                )
+
     return '\n'.join(parts).strip()
 
 
@@ -5031,6 +5060,236 @@ async def streaming_chat_response_handler(response, ctx):
                                 break
                         except Exception as e:
                             log.debug(e)
+                            break
+
+                # ── Diagram renderer loop ──────────────────────────────
+                # After the code-interpreter loop, scan accumulated content
+                # for mermaid/vega/vega-lite code blocks and process them
+                # via client-side rendering, feeding errors or PNG previews
+                # back to the LLM for self-correction.
+                DIAGRAM_BLOCK_RE = re.compile(
+                    r'```(mermaid|vega|vega-lite)\s*\n(.*?)```',
+                    re.DOTALL,
+                )
+
+                def extract_diagram_blocks(out):
+                    """Scan message items' text for diagram code blocks.
+                    
+                    Extracts each diagram into its own open_webui:diagram_renderer
+                    output item and removes the code block from the message text.
+                    Returns True if any blocks were extracted.
+                    """
+                    found = False
+                    new_items = []
+                    for item in list(out):  # iterate a copy to avoid mutation issues
+                        if item.get('type') != 'message':
+                            continue
+                        parts = item.get('content', [])
+                        for part in parts:
+                            if part.get('type') != 'output_text':
+                                continue
+                            text = part.get('text', '')
+                            matches = list(DIAGRAM_BLOCK_RE.finditer(text))
+                            if not matches:
+                                continue
+                            found = True
+                            # Remove diagram blocks from the text (reverse to preserve indices)
+                            for m in reversed(matches):
+                                text = text[:m.start()] + text[m.end():]
+                            part['text'] = text
+
+                            # Create diagram_renderer output items
+                            for m in matches:
+                                lang = m.group(1)
+                                code = m.group(2).strip()
+                                new_items.append(
+                                    {
+                                        'type': 'open_webui:diagram_renderer',
+                                        'id': output_id('dr'),
+                                        'status': 'in_progress',
+                                        'lang': lang,
+                                        'code': code,
+                                        'svg': None,
+                                        'png_url': None,
+                                        'error': None,
+                                        'attempt': 0,
+                                    }
+                                )
+                    if new_items:
+                        out.extend(new_items)
+                        # Append a new message item for any follow-up content
+                        out.append(
+                            {
+                                'type': 'message',
+                                'id': output_id('msg'),
+                                'status': 'in_progress',
+                                'role': 'assistant',
+                                'content': [{'type': 'output_text', 'text': ''}],
+                            }
+                        )
+                    return found
+
+                if event_caller:
+                    extract_diagram_blocks(output)
+
+                    DIAGRAM_MAX_RETRIES = 3
+                    diagram_retries = 0
+
+                    # Check if the model supports vision (for PNG visual feedback)
+                    model_has_vision = (model.get('info', {}).get('meta', {}).get('capabilities') or {}).get(
+                        'vision', True
+                    )
+
+                    # Process diagram items that need rendering
+                    pending_diagrams = [
+                        item for item in output
+                        if item.get('type') == 'open_webui:diagram_renderer'
+                        and item.get('status') != 'completed'
+                    ]
+
+                    while pending_diagrams and diagram_retries < DIAGRAM_MAX_RETRIES:
+                        diagram_retries += 1
+
+                        # Emit current state (shows "Drawing diagram..." in the UI)
+                        await event_emitter(
+                            {
+                                'type': 'chat:completion',
+                                'data': {
+                                    'content': serialize_output(full_output()),
+                                    'output': full_output(),
+                                },
+                            }
+                        )
+
+                        has_error = False
+                        for dr_item in pending_diagrams:
+                            dr_item['attempt'] = dr_item.get('attempt', 0) + 1
+                            try:
+                                result = await event_caller(
+                                    {
+                                        'type': 'execute:diagram',
+                                        'data': {
+                                            'id': str(uuid4()),
+                                            'lang': dr_item['lang'],
+                                            'code': dr_item['code'],
+                                            'session_id': metadata.get('session_id', None),
+                                        },
+                                    }
+                                )
+
+                                if isinstance(result, dict) and result.get('error'):
+                                    dr_item['error'] = result['error']
+                                    dr_item['svg'] = None
+                                    dr_item['png_url'] = None
+                                    has_error = True
+                                    log.debug(f'Diagram render error: {result["error"]}')
+                                elif isinstance(result, dict) and result.get('svg'):
+                                    dr_item['svg'] = result['svg']
+                                    dr_item['error'] = None
+
+                                    # Convert PNG to a stored URL if vision model
+                                    if model_has_vision and result.get('png'):
+                                        try:
+                                            png_url = await get_image_url_from_base64(
+                                                request,
+                                                result['png'],
+                                                metadata,
+                                                user,
+                                            )
+                                            dr_item['png_url'] = png_url or result['png']
+                                        except Exception as e:
+                                            log.debug(f'Failed to store diagram PNG: {e}')
+                                            dr_item['png_url'] = result['png']
+
+                                    dr_item['status'] = 'completed'
+                                    dr_item['duration'] = 0
+                                else:
+                                    dr_item['error'] = 'Unexpected response from diagram renderer'
+                                    has_error = True
+                            except Exception as e:
+                                dr_item['error'] = str(e)
+                                has_error = True
+                                log.debug(f'Diagram render exception: {e}')
+
+                        # If any diagrams had errors or we have vision feedback to send,
+                        # feed back to the LLM.
+                        needs_llm_retry = has_error or (model_has_vision and any(
+                            d.get('status') == 'completed' and d.get('png_url')
+                            for d in pending_diagrams
+                        ))
+
+                        if needs_llm_retry and diagram_retries < DIAGRAM_MAX_RETRIES:
+                            # Mark errored items so they show in the output
+                            for dr_item in pending_diagrams:
+                                if dr_item.get('error'):
+                                    dr_item['status'] = 'completed'
+                                    dr_item['duration'] = 0
+
+                            # Emit updated state before re-invoking LLM
+                            await event_emitter(
+                                {
+                                    'type': 'chat:completion',
+                                    'data': {
+                                        'content': serialize_output(full_output()),
+                                        'output': full_output(),
+                                    },
+                                }
+                            )
+
+                            try:
+                                new_form_data = {
+                                    **form_data,
+                                    'model': model_id,
+                                    'stream': True,
+                                    'metadata': metadata,
+                                    'messages': [
+                                        *form_data['messages'],
+                                        *convert_output_to_messages(
+                                            full_output(), raw=True, reasoning_format=get_reasoning_format(model)
+                                        ),
+                                    ],
+                                }
+
+                                prior_output = full_output()
+                                # Trim trailing empty message item
+                                if (
+                                    prior_output
+                                    and prior_output[-1].get('type') == 'message'
+                                    and prior_output[-1].get('status') == 'in_progress'
+                                ):
+                                    msg_parts = prior_output[-1].get('content', [])
+                                    if not msg_parts or (len(msg_parts) == 1 and not msg_parts[0].get('text', '').strip()):
+                                        prior_output.pop()
+                                output = []
+
+                                res = await generate_chat_completion(
+                                    request,
+                                    new_form_data,
+                                    user,
+                                    bypass_system_prompt=True,
+                                )
+
+                                if isinstance(res, StreamingResponse):
+                                    await stream_body_handler(res, new_form_data)
+                                    output[:0] = prior_output
+                                    prior_output = []
+                                else:
+                                    output = prior_output
+                                    prior_output = []
+                                    break
+
+                                # Check for new diagram blocks in the LLM's response
+                                extract_diagram_blocks(output)
+                                pending_diagrams = [
+                                    item for item in output
+                                    if item.get('type') == 'open_webui:diagram_renderer'
+                                    and item.get('status') != 'completed'
+                                ]
+                            except Exception as e:
+                                log.debug(f'Diagram retry error: {e}')
+                                break
+                        else:
+                            # All diagrams rendered successfully, no LLM retry needed
                             break
 
                 # Mark all in-progress items as completed

@@ -288,6 +288,48 @@ def convert_output_to_messages(
                 if output_text:
                     pending_content.append(f'<code_interpreter_output>\n{output_text}\n</code_interpreter_output>')
 
+        elif item_type == 'open_webui:diagram_renderer':
+            # Include diagram renderer output so the LLM knows the diagram
+            # was already rendered and doesn't retry from scratch.
+            code = item.get('code', '')
+            lang = item.get('lang', 'mermaid')
+            error = item.get('error', '')
+            svg = item.get('svg', '')
+            png_url = item.get('png_url', '')
+
+            if code:
+                pending_content.append(f'<diagram lang="{lang}">\n{code}\n</diagram>')
+
+            if error:
+                pending_content.append(f'<diagram_error>\n{error}\n</diagram_error>')
+            elif svg:
+                pending_content.append('<diagram_result>Diagram rendered successfully.</diagram_result>')
+
+            # If we have a PNG, flush text and add a multimodal message
+            # so the VLM can inspect the visual output.
+            if png_url and not error:
+                flush_pending()
+                messages.append(
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': (
+                                    'Here is a screenshot of the rendered diagram. '
+                                    'Inspect it visually. If it looks correct, continue without outputting a new diagram. '
+                                    'If there are visual issues (wrong layout, missing elements, unreadable text, etc.), '
+                                    'output a corrected diagram in a new code block.'
+                                ),
+                            },
+                            {
+                                'type': 'image_url',
+                                'image_url': {'url': png_url},
+                            },
+                        ],
+                    }
+                )
+
         elif item_type.startswith('open_webui:'):
             # Skip other extension types
             pass
