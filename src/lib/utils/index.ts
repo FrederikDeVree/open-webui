@@ -1822,15 +1822,18 @@ export const initMermaid = async () => {
 		startOnLoad: false, // Should be false when using render API
 		theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
 		securityLevel: 'loose',
+		// Use native SVG <text> labels instead of HTML (<foreignObject>) labels.
+		// HTML labels are measured in a throwaway DOM node, and when the label
+		// wraps to extra lines the node box does not reliably grow — so long
+		// labels get clipped (e.g. the last line cut off). This is especially
+		// visible in the live GUI, where the SVG's foreignObject HTML re-flows
+		// against the app's own fonts/CSS (different from mermaid's off-screen
+		// measurement). Native SVG labels are sized deterministically from the
+		// wrapped line count, so boxes grow to fit in BOTH the GUI and the PNG.
+		// `htmlLabels` must be set at the top level — mermaid 11 deprecated the
+		// nested `flowchart.htmlLabels` key (it still works but logs a warning).
+		htmlLabels: false,
 		flowchart: {
-			// Use native SVG <text> labels instead of HTML (<foreignObject>) labels.
-			// HTML labels are measured in a throwaway DOM node and the node box does
-			// not reliably grow when the text wraps to extra lines, so long labels
-			// get clipped (e.g. the last line cut off). Native SVG labels are sized
-			// deterministically from the wrapped line count, so boxes grow to fit.
-			// This also produces cleaner PNGs since there are no foreignObjects to
-			// rasterize.
-			htmlLabels: false,
 			useMaxWidth: true,
 			wrappingWidth: 200,
 			padding: 10,
