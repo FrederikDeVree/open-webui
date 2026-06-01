@@ -1879,32 +1879,58 @@ export const renderVegaVisualization = async (spec: string, i18n?: any) => {
 
 /**
  * Convert an SVG string to a PNG data URI via an off-screen canvas.
+ *
+ * Uses a data-URI (not Blob URL) so the canvas is never tainted by
+ * cross-origin restrictions — mermaid SVGs contain <foreignObject>
+ * which would otherwise trigger a SecurityError on toDataURL().
  */
 export const svgToPng = (svgString: string, scale = 2): Promise<string> => {
 	return new Promise((resolve, reject) => {
-		const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-		const url = URL.createObjectURL(svgBlob);
+		// Ensure the SVG has explicit width/height so the <img> gets real dimensions.
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(svgString, 'image/svg+xml');
+		const svgEl = doc.documentElement;
+
+		// Read natural size from the SVG attributes or viewBox.
+		let width = parseFloat(svgEl.getAttribute('width') || '0');
+		let height = parseFloat(svgEl.getAttribute('height') || '0');
+		if ((!width || !height) && svgEl.getAttribute('viewBox')) {
+			const parts = svgEl.getAttribute('viewBox')!.split(/[\s,]+/);
+			width = width || parseFloat(parts[2]) || 800;
+			height = height || parseFloat(parts[3]) || 600;
+		}
+		width = width || 800;
+		height = height || 600;
+
+		// Strip any foreignObject elements — they cause the canvas to be
+		// tainted on most browsers regardless of the loading method.
+		doc.querySelectorAll('foreignObject').forEach((fo) => fo.remove());
+
+		const cleanSvg = new XMLSerializer().serializeToString(doc);
+		const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(cleanSvg);
+
 		const img = new Image();
 		img.onload = () => {
 			const canvas = document.createElement('canvas');
-			canvas.width = img.naturalWidth * scale;
-			canvas.height = img.naturalHeight * scale;
+			canvas.width = width * scale;
+			canvas.height = height * scale;
 			const ctx = canvas.getContext('2d');
 			if (!ctx) {
-				URL.revokeObjectURL(url);
 				reject(new Error('Could not get canvas 2d context'));
 				return;
 			}
 			ctx.scale(scale, scale);
-			ctx.drawImage(img, 0, 0);
-			URL.revokeObjectURL(url);
-			resolve(canvas.toDataURL('image/png'));
+			ctx.drawImage(img, 0, 0, width, height);
+			try {
+				resolve(canvas.toDataURL('image/png'));
+			} catch (e) {
+				reject(e);
+			}
 		};
 		img.onerror = () => {
-			URL.revokeObjectURL(url);
 			reject(new Error('Failed to load SVG into image'));
 		};
-		img.src = url;
+		img.src = dataUri;
 	});
 };
 
