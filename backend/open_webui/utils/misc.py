@@ -309,6 +309,11 @@ def convert_output_to_messages(
             # so the VLM can inspect the visual output.
             if png_url and not error:
                 flush_pending()
+                log.info(
+                    f'[diagram-inspect] Adding multimodal user message with PNG '
+                    f'(lang={lang}, png_url_len={len(png_url) if png_url else 0}, '
+                    f'png_url_prefix={png_url[:80] if png_url else ""!r})'
+                )
                 messages.append(
                     {
                         'role': 'user',

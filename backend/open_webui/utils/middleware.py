@@ -5255,17 +5255,46 @@ async def streaming_chat_response_handler(response, ctx):
                             )
 
                             try:
+                                _diagram_retry_messages = [
+                                    *form_data['messages'],
+                                    *convert_output_to_messages(
+                                        full_output(), raw=True, reasoning_format=get_reasoning_format(model)
+                                    ),
+                                ]
+                                # Summarize message structure so we can confirm the
+                                # multimodal user message with the PNG made it in.
+                                try:
+                                    _summary = []
+                                    for _m in _diagram_retry_messages[-5:]:
+                                        _role = _m.get('role')
+                                        _c = _m.get('content')
+                                        if isinstance(_c, list):
+                                            _types = [
+                                                (
+                                                    p.get('type'),
+                                                    (p.get('image_url') or {}).get('url', '')[:60]
+                                                    if p.get('type') == 'image_url'
+                                                    else len(p.get('text', '') or ''),
+                                                )
+                                                for p in _c
+                                            ]
+                                            _summary.append(f'{_role}:multipart={_types}')
+                                        else:
+                                            _summary.append(f'{_role}:text_len={len(_c) if isinstance(_c, str) else 0}')
+                                    log.info(
+                                        f'[diagram-inspect] retry={diagram_retries} '
+                                        f'sending {len(_diagram_retry_messages)} messages; '
+                                        f'last5={_summary}'
+                                    )
+                                except Exception as _log_e:
+                                    log.debug(f'[diagram-inspect] log summary failed: {_log_e}')
+
                                 new_form_data = {
                                     **form_data,
                                     'model': model_id,
                                     'stream': True,
                                     'metadata': metadata,
-                                    'messages': [
-                                        *form_data['messages'],
-                                        *convert_output_to_messages(
-                                            full_output(), raw=True, reasoning_format=get_reasoning_format(model)
-                                        ),
-                                    ],
+                                    'messages': _diagram_retry_messages,
                                 }
 
                                 prior_output = full_output()
