@@ -5208,6 +5208,26 @@ async def streaming_chat_response_handler(response, ctx):
                                             f'PNG size={len(result["png"])} chars, sending data URL '
                                             f'to vision LLM for verification'
                                         )
+
+                                        # DEBUG: dump the rendered PNG to disk so it can
+                                        # be visually inspected against what the UI shows.
+                                        try:
+                                            import base64 as _b64
+                                            import time as _time
+                                            from pathlib import Path as _Path
+
+                                            _b64_data = png_data_url.split(',', 1)[1] if ',' in png_data_url else png_data_url
+                                            _dump_dir = _Path('/tmp/owui-diagram-png')
+                                            _dump_dir.mkdir(parents=True, exist_ok=True)
+                                            _dump_path = _dump_dir / (
+                                                f'diagram_{dr_item["lang"]}_'
+                                                f'{int(_time.time() * 1000)}_'
+                                                f'attempt{dr_item.get("attempt", 0)}.png'
+                                            )
+                                            _dump_path.write_bytes(_b64.b64decode(_b64_data))
+                                            log.info(f'[diagram-inspect] Wrote rendered PNG to {_dump_path}')
+                                        except Exception as _dump_e:
+                                            log.warning(f'[diagram-inspect] Failed to dump PNG: {_dump_e}')
                                     else:
                                         log.info(
                                             f'Diagram rendered successfully (lang={dr_item["lang"]}), '
