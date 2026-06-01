@@ -5182,7 +5182,7 @@ async def streaming_chat_response_handler(response, ctx):
                                     dr_item['svg'] = None
                                     dr_item['png_url'] = None
                                     has_error = True
-                                    log.debug(f'Diagram render error: {result["error"]}')
+                                    log.info(f'Diagram render error (lang={dr_item["lang"]}): {result["error"]}')
                                 elif isinstance(result, dict) and result.get('svg'):
                                     dr_item['svg'] = result['svg']
                                     dr_item['error'] = None
@@ -5197,19 +5197,31 @@ async def streaming_chat_response_handler(response, ctx):
                                                 user,
                                             )
                                             dr_item['png_url'] = png_url or result['png']
+                                            log.info(
+                                                f'Diagram rendered successfully (lang={dr_item["lang"]}), '
+                                                f'PNG size={len(result["png"])} chars, png_url set; '
+                                                f'will send to vision LLM for verification'
+                                            )
                                         except Exception as e:
-                                            log.debug(f'Failed to store diagram PNG: {e}')
+                                            log.warning(f'Failed to store diagram PNG: {e}')
                                             dr_item['png_url'] = result['png']
+                                    else:
+                                        log.info(
+                                            f'Diagram rendered successfully (lang={dr_item["lang"]}), '
+                                            f'but no PNG sent to LLM (vision={model_has_vision}, '
+                                            f'png_present={bool(result.get("png"))})'
+                                        )
 
                                     dr_item['status'] = 'completed'
                                     dr_item['duration'] = 0
                                 else:
                                     dr_item['error'] = 'Unexpected response from diagram renderer'
                                     has_error = True
+                                    log.warning(f'Diagram renderer returned unexpected response: {result!r}')
                             except Exception as e:
                                 dr_item['error'] = str(e)
                                 has_error = True
-                                log.debug(f'Diagram render exception: {e}')
+                                log.warning(f'Diagram render exception: {e}')
 
                         # If any diagrams had errors or we have vision feedback to send,
                         # feed back to the LLM.
@@ -5224,6 +5236,12 @@ async def streaming_chat_response_handler(response, ctx):
                                 if dr_item.get('error'):
                                     dr_item['status'] = 'completed'
                                     dr_item['duration'] = 0
+
+                            log.info(
+                                f'Re-invoking LLM with diagram feedback (retry {diagram_retries}/{DIAGRAM_MAX_RETRIES}): '
+                                f'{sum(1 for d in pending_diagrams if d.get("error"))} errors, '
+                                f'{sum(1 for d in pending_diagrams if d.get("png_url"))} PNGs for visual verification'
+                            )
 
                             # Emit updated state before re-invoking LLM
                             await event_emitter(
