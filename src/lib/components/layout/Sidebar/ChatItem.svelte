@@ -454,7 +454,8 @@
 					? 'bg-gray-100 dark:bg-gray-950 selected'
 					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
 			href="/c/{id}"
-			on:click={() => {
+			on:click={(e) => {
+				dispatch('chatSelect', { chatId: id, event: e });
 				dispatch('select');
 
 				if ($selectedFolder) {

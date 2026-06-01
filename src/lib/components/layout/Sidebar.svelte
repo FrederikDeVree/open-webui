@@ -31,6 +31,7 @@
 		sidebarWidth,
 		activeChatIds
 	} from '$lib/stores';
+import { selectedChatIds } from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
 	const i18n = getContext('i18n');
@@ -44,7 +45,11 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		archiveChats,
+		deleteChats,
+		toggleChatsPinned,
+		moveChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -85,6 +90,123 @@
 
 	let selectedChatId = null;
 	let showCreateChannel = false;
+
+	// Multi-select state
+	$: selectedChatIdsArr = $selectedChatIds ? Array.from($selectedChatIds) : [];
+	$: showBatchBar = $selectedChatIds?.size > 0;
+
+	const clearSelection = () => {
+		selectedChatIds.set(new Set());
+	};
+
+	const handleChatSelect = (chatId: string, e: MouseEvent) => {
+		if (e.shiftKey && lastSelectedChatId) {
+			// Range selection: find all chats between lastSelectedChatId and this chatId
+			const allChats = [
+				...$pinnedChats.map((c) => ({ id: c.id, isPinned: true })),
+				...($chats ?? []).map((c) => ({ id: c.id, isPinned: false }))
+			];
+			const lastIdx = allChats.findIndex((c) => c.id === lastSelectedChatId);
+			const currentIdx = allChats.findIndex((c) => c.id === chatId);
+
+			if (lastIdx !== -1 && currentIdx !== -1) {
+				const start = Math.min(lastIdx, currentIdx);
+				const end = Math.max(lastIdx, currentIdx);
+				const rangeIds = allChats.slice(start, end + 1).map((c) => c.id);
+
+				selectedChatIds.update((prev) => {
+					const next = new Set(prev);
+					for (const id of rangeIds) {
+						if (e.ctrlKey || e.metaKey) {
+							next.has(id) ? next.delete(id) : next.add(id);
+						} else {
+							next.add(id);
+						}
+					}
+					return next;
+				});
+			}
+		} else if (e.ctrlKey || e.metaKey) {
+			// Toggle single
+			selectedChatIds.update((prev) => {
+				const next = new Set(prev);
+				next.has(chatId) ? next.delete(chatId) : next.add(chatId);
+				return next;
+			});
+			lastSelectedChatId = chatId;
+		} else if (e.shiftKey) {
+			// First shift-click establishes range
+			selectedChatIds.update((prev) => {
+				const next = new Set();
+				next.add(chatId);
+				return next;
+			});
+			lastSelectedChatId = chatId;
+		} else {
+			// Regular click: select only this one, clear others
+			selectedChatIds.set(new Set([chatId]));
+			lastSelectedChatId = chatId;
+		}
+	};
+
+	let lastSelectedChatId = null;
+
+	const batchDelete = async () => {
+		if ($selectedChatIds.size === 0) return;
+		const ids = Array.from($selectedChatIds);
+		clearSelection();
+		const res = await deleteChats(localStorage.token, ids).catch((err) => {
+			toast.error(`${err}`);
+			return null;
+		});
+		if (res) {
+			await initChatList();
+			toast.success(`${ids.length} chat${ids.length > 1 ? 's' : ''} deleted`);
+		}
+	};
+
+	const batchArchive = async () => {
+		if ($selectedChatIds.size === 0) return;
+		const ids = Array.from($selectedChatIds);
+		clearSelection();
+		const res = await archiveChats(localStorage.token, ids).catch((err) => {
+			toast.error(`${err}`);
+			return null;
+		});
+		if (res) {
+			await initChatList();
+			toast.success(`${ids.length} chat${ids.length > 1 ? 's' : ''} archived`);
+		}
+	};
+
+	const batchPin = async () => {
+		if ($selectedChatIds.size === 0) return;
+		const ids = Array.from($selectedChatIds);
+		clearSelection();
+		const res = await toggleChatsPinned(localStorage.token, ids).catch((err) => {
+			toast.error(`${err}`);
+			return null;
+		});
+		if (res) {
+			await initChatList();
+			toast.success('Chats toggled');
+		}
+	};
+
+	const batchMoveToFolder = async (folderId: string | null) => {
+		if ($selectedChatIds.size === 0) return;
+		const ids = Array.from($selectedChatIds);
+		clearSelection();
+		const res = await moveChats(localStorage.token, ids, folderId).catch((err) => {
+			toast.error(`${err}`);
+			return null;
+		});
+		if (res) {
+			await initChatList();
+			toast.success(`Chats moved`);
+		}
+	};
+
 
 	// Pagination variables
 	let chatListLoading = false;
@@ -467,6 +589,7 @@
 	const onBlur = () => {
 		shiftKey = false;
 		selectedChatId = null;
+		selectedChatIds.set(new Set());
 	};
 
 	const MIN_WIDTH = 220;
@@ -647,6 +770,7 @@
 
 	const newChatHandler = async () => {
 		selectedChatId = null;
+		selectedChatIds.set(new Set());
 		selectedFolder.set(null);
 
 		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
@@ -1417,6 +1541,83 @@
 						}
 					}}
 				>
+					<!-- Batch Operations Bar -->
+					{#if showBatchBar}
+						<div class="mb-2 px-0.5 py-1">
+							<div class="flex items-center justify-between rounded-xl bg-gray-200 dark:bg-gray-800 px-3 py-2">
+								<div class="flex items-center gap-2">
+									<div class="text-xs font-medium text-gray-700 dark:text-gray-200">
+										{$selectedChatIds?.size || 0} selected
+									</div>
+								</div>
+								<div class="flex items-center gap-1">
+									<!-- Pin -->
+									<button
+										class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-300/50 dark:hover:bg-gray-700/50 transition"
+										on:click={batchPin}
+										title="Pin/Unpin"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.563.563 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.563.563 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+										</svg>
+										Pin
+									</button>
+									<!-- Move -->
+									<button
+										class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-300/50 dark:hover:bg-gray-700/50 transition"
+										on:click={async () => {
+											let targetFolderId = null;
+											if ($folders.length > 0) {
+												targetFolderId = $folders[0]?.id ?? null;
+											}
+											await batchMoveToFolder(targetFolderId);
+										}}
+										title="Move to folder"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
+										</svg>
+										Move
+									</button>
+									<!-- Archive -->
+									<button
+										class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-300/50 dark:hover:bg-gray-700/50 transition"
+										on:click={batchArchive}
+										title="Archive"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+										</svg>
+										Archive
+									</button>
+									<!-- Delete -->
+									<button
+										class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-100/50 dark:hover:bg-red-900/30 transition"
+										on:click={batchDelete}
+										title="Delete"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+										</svg>
+										Delete
+									</button>
+									<!-- Clear -->
+									<button
+										class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-300/50 dark:hover:bg-gray-700/50 transition"
+										on:click={clearSelection}
+										title="Clear selection"
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-3.5">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+							</div>
+						</div>
+						<hr class="border-gray-100 dark:border-gray-900 my-1.5" />
+					{/if}
+
+
 					{#if $pinnedChats.length > 0}
 						<div class="mb-1">
 							<div class="flex flex-col space-y-1 rounded-xl">
@@ -1481,7 +1682,10 @@
 												updatedAt={chat.updated_at}
 												lastReadAt={chat.last_read_at}
 												{shiftKey}
-												selected={selectedChatId === chat.id}
+												selected={selectedChatId === chat.id || $selectedChatIds?.has(chat.id)}
+												on:chatSelect={(e) => {
+													handleChatSelect(e.detail.chatId, e.detail.event);
+												}}
 												on:select={() => {
 													selectedChatId = chat.id;
 												}}
@@ -1544,7 +1748,10 @@
 										updatedAt={chat.updated_at}
 										lastReadAt={chat.last_read_at}
 										{shiftKey}
-										selected={selectedChatId === chat.id}
+										selected={selectedChatId === chat.id || $selectedChatIds?.has(chat.id)}
+										on:chatSelect={(e) => {
+											handleChatSelect(e.detail.chatId, e.detail.event);
+										}}
 										on:select={() => {
 											selectedChatId = chat.id;
 										}}

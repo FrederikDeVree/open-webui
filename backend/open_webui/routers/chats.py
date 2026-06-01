@@ -1567,6 +1567,95 @@ async def delete_tag_by_id_and_tag_name(
 
 
 ############################
+# Batch Chat Operations
+############################
+
+
+class BatchChatForm(BaseModel):
+    ids: list[str]
+
+
+class BatchChatFolderForm(BaseModel):
+    ids: list[str]
+    folder_id: Optional[str] = None
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    form_data: BatchChatForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Archive multiple chats at once."""
+    try:
+        result = await Chats.archive_chats_by_ids(form_data.ids, user.id, db=db)
+        return result
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
+
+
+@router.post('/batch/unarchive', response_model=bool)
+async def batch_unarchive_chats(
+    form_data: BatchChatForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Unarchive multiple chats at once."""
+    try:
+        result = await Chats.unarchive_chats_by_ids(form_data.ids, user.id, db=db)
+        return result
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
+
+
+@router.post('/batch/delete', response_model=bool)
+async def batch_delete_chats(
+    form_data: BatchChatForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Delete multiple chats at once."""
+    try:
+        result = await Chats.delete_chats_by_ids(form_data.ids, user.id, db=db)
+        return result
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
+
+
+@router.post('/batch/pin', response_model=bool)
+async def batch_pin_chats(
+    form_data: BatchChatForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Toggle pin status for multiple chats at once."""
+    try:
+        result = await Chats.toggle_chats_pinned_by_ids(form_data.ids, user.id, db=db)
+        return result
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
+
+
+@router.post('/batch/move', response_model=bool)
+async def batch_move_chats(
+    form_data: BatchChatFolderForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Move multiple chats to a folder at once."""
+    try:
+        result = await Chats.move_chats_by_ids_to_folder(form_data.ids, user.id, form_data.folder_id, db=db)
+        return result
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
+
+
+############################
 # DeleteAllTagsById
 ############################
 

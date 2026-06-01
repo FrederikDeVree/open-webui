@@ -126,6 +126,9 @@ export const desktopEvent: Writable<DesktopEvent | null> = writable(null);
 export const scrollPaginationEnabled = writable(false);
 export const currentChatPage = writable(1);
 
+// Multi-select state for batch operations on chats
+export const selectedChatIds = writable<Set<string>>(new Set());
+
 export const isLastActiveTab = writable(true);
 export const playingNotificationSound = writable(false);
 

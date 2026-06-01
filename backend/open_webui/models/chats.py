@@ -1696,5 +1696,84 @@ class ChatTable:
                 return []
             return row[0]
 
+    async def delete_chats_by_ids(self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None) -> bool:
+        """Delete multiple chats by their IDs (scoped to user_id)."""
+        try:
+            async with get_async_db_context(db) as db:
+                chat_result = await db.execute(select(Chat).filter(Chat.id.in_(ids), Chat.user_id == user_id))
+                chat_list = chat_result.scalars().all()
+                chat_ids = [c.id for c in chat_list]
+
+                if not chat_ids:
+                    return False
+
+                await db.execute(update(AutomationRun).where(AutomationRun.chat_id.in_(chat_ids)).values(chat_id=None))
+                await db.execute(delete(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)))
+                await db.execute(delete(Chat).where(Chat.id.in_(chat_ids)))
+                await db.execute(update(Chat).where(Chat.id.in_(chat_ids)).values(share_id=None))
+                await db.commit()
+
+                from open_webui.models.shared_chats import SharedChats
+
+                for cid in chat_ids:
+                    try:
+                        await SharedChats.delete_by_chat_id(cid, db=db)
+                    except Exception:
+                        pass
+
+                return True
+        except Exception:
+            return False
+
+    async def archive_chats_by_ids(self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None) -> bool:
+        """Archive multiple chats by their IDs (scoped to user_id)."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(update(Chat).where(Chat.id.in_(ids), Chat.user_id == user_id).values(archived=True))
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def unarchive_chats_by_ids(self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None) -> bool:
+        """Unarchive multiple chats by their IDs (scoped to user_id)."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .where(Chat.id.in_(ids), Chat.user_id == user_id, Chat.archived == True)
+                    .values(archived=False)
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def toggle_chats_pinned_by_ids(self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None) -> bool:
+        """Toggle pin status for multiple chats (scoped to user_id)."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat).where(Chat.id.in_(ids), Chat.user_id == user_id).values(pinned=~Chat.pinned)
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def move_chats_by_ids_to_folder(
+        self, ids: list[str], user_id: str, folder_id: Optional[str], db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Move multiple chats to a folder (scoped to user_id)."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat).where(Chat.id.in_(ids), Chat.user_id == user_id).values(folder_id=folder_id)
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
 
 Chats = ChatTable()
