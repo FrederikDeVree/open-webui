@@ -5187,24 +5187,27 @@ async def streaming_chat_response_handler(response, ctx):
                                     dr_item['svg'] = result['svg']
                                     dr_item['error'] = None
 
-                                    # Convert PNG to a stored URL if vision model
+                                    # Feed the PNG back to the vision model so it can
+                                    # visually inspect its own diagram. We send the raw
+                                    # base64 data URL directly: vLLM (and other OpenAI
+                                    # compatible providers) require an HTTP, data: or
+                                    # file: URL. A stored file URL is returned as a
+                                    # relative path (/api/v1/files/.../content) which is
+                                    # neither absolute-HTTP nor reachable/authenticated
+                                    # from the provider, so it gets rejected with
+                                    # "The URL must be either a HTTP, data or file URL.".
                                     if model_has_vision and result.get('png'):
-                                        try:
-                                            png_url = await get_image_url_from_base64(
-                                                request,
-                                                result['png'],
-                                                metadata,
-                                                user,
-                                            )
-                                            dr_item['png_url'] = png_url or result['png']
-                                            log.info(
-                                                f'Diagram rendered successfully (lang={dr_item["lang"]}), '
-                                                f'PNG size={len(result["png"])} chars, png_url set; '
-                                                f'will send to vision LLM for verification'
-                                            )
-                                        except Exception as e:
-                                            log.warning(f'Failed to store diagram PNG: {e}')
-                                            dr_item['png_url'] = result['png']
+                                        png_data_url = result['png']
+                                        # Normalize to a proper data: URL if the renderer
+                                        # returned raw base64 without the scheme prefix.
+                                        if not png_data_url.startswith('data:'):
+                                            png_data_url = f'data:image/png;base64,{png_data_url}'
+                                        dr_item['png_url'] = png_data_url
+                                        log.info(
+                                            f'Diagram rendered successfully (lang={dr_item["lang"]}), '
+                                            f'PNG size={len(result["png"])} chars, sending data URL '
+                                            f'to vision LLM for verification'
+                                        )
                                     else:
                                         log.info(
                                             f'Diagram rendered successfully (lang={dr_item["lang"]}), '
@@ -5333,7 +5336,7 @@ async def streaming_chat_response_handler(response, ctx):
                                     and item.get('status') != 'completed'
                                 ]
                             except Exception as e:
-                                log.debug(f'Diagram retry error: {e}')
+                                log.warning(f'Diagram retry error: {e}', exc_info=True)
                                 break
                         else:
                             # All diagrams rendered successfully, no LLM retry needed

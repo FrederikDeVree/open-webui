@@ -306,8 +306,20 @@ def convert_output_to_messages(
                 pending_content.append('<diagram_result>Diagram rendered successfully.</diagram_result>')
 
             # If we have a PNG, flush text and add a multimodal message
-            # so the VLM can inspect the visual output.
-            if png_url and not error:
+            # so the VLM can inspect the visual output. Only forward URLs the
+            # provider can actually fetch (data:, http(s):, file:). Older chats
+            # may have persisted a relative file URL (/api/v1/files/.../content)
+            # which providers reject with "The URL must be either a HTTP, data
+            # or file URL." — skip those so follow-up turns don't hard-error.
+            png_url_usable = isinstance(png_url, str) and png_url.startswith(
+                ('data:', 'http://', 'https://', 'file://')
+            )
+            if png_url and not error and not png_url_usable:
+                log.warning(
+                    f'[diagram-inspect] Skipping non-fetchable diagram png_url '
+                    f'(lang={lang}, prefix={png_url[:80]!r})'
+                )
+            if png_url and not error and png_url_usable:
                 flush_pending()
                 log.info(
                     f'[diagram-inspect] Adding multimodal user message with PNG '
