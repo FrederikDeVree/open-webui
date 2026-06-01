@@ -123,6 +123,8 @@
 	let messageInput: MessageInput | undefined;
 	let messagesRef: Messages | undefined;
 
+	let awaitingUpload = false;
+
 	let autoScroll = true;
 	$: scrollDuringGeneration = $settings?.scrollDuringGeneration ?? true;
 	let isNearTop = true;
@@ -1997,10 +1999,22 @@
 			files.length > 0 &&
 			files.filter((file) => file.type !== 'image' && file.status === 'uploading').length > 0
 		) {
-			toast.error(
-				$i18n.t(`Oops! There are files still uploading. Please wait for the upload to complete.`)
-			);
-			return;
+			// Wait for all pending uploads to finish before sending
+			awaitingUpload = true;
+			await new Promise<void>((resolve) => {
+				const check = () => {
+					if (
+						files.filter((file) => file.type !== 'image' && file.status === 'uploading')
+							.length === 0
+					) {
+						resolve();
+					} else {
+						setTimeout(check, 100);
+					}
+				};
+				check();
+			});
+			awaitingUpload = false;
 		}
 
 		if (
@@ -3128,6 +3142,7 @@
 									bind:atSelectedModel
 									bind:showCommands
 									bind:dragged
+									uploadPending={awaitingUpload}
 									toolServers={$toolServers}
 									{generating}
 									{stopResponse}
@@ -3214,6 +3229,7 @@
 									{createMessagePair}
 									{onSelect}
 									{onUpload}
+									uploadPending={awaitingUpload}
 									onChange={(data) => {
 										if (!$temporaryChatEnabled) {
 											saveDraft(data);

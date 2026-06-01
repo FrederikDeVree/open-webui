@@ -63,6 +63,7 @@
 	export let toolServers = [];
 
 	export let dragged = false;
+	export let uploadPending = false;
 
 	let models = [];
 	let selectedModelIdx = 0;
@@ -228,6 +229,7 @@
 					{toolServers}
 					{stopResponse}
 					{createMessagePair}
+					{uploadPending}
 					placeholder={$i18n.t('How can I help you today?')}
 					{onChange}
 					{onUpload}
