@@ -70,6 +70,14 @@
 
 	let closedBannerIds = [];
 
+	const getDismissedBannerIds = (): string[] => {
+		try {
+			return JSON.parse(localStorage.getItem('dismissedBannerIds') ?? '[]');
+		} catch {
+			return [];
+		}
+	};
+
 	let showShareChatModal = false;
 	let showDownloadChatModal = false;
 </script>
@@ -332,7 +340,7 @@
 						/>
 					{/if}
 
-					{#each $banners.filter((b) => ![...JSON.parse(localStorage.getItem('dismissedBannerIds') ?? '[]'), ...closedBannerIds].includes(b.id)) as banner (banner.id)}
+					{#each $banners.filter((b) => ![...getDismissedBannerIds(), ...closedBannerIds].includes(b.id)) as banner (banner.id)}
 						<Banner
 							{banner}
 							on:dismiss={(e) => {
@@ -342,10 +350,9 @@
 									localStorage.setItem(
 										'dismissedBannerIds',
 										JSON.stringify(
-											[
-												bannerId,
-												...JSON.parse(localStorage.getItem('dismissedBannerIds') ?? '[]')
-											].filter((id) => $banners.find((b) => b.id === id))
+											[bannerId, ...getDismissedBannerIds()].filter((id) =>
+												$banners.find((b) => b.id === id)
+											)
 										)
 									);
 								} else {

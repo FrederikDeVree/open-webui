@@ -1010,7 +1010,11 @@
 				if (userSettings) {
 					settings.set(userSettings.ui);
 				} else {
-					settings.set(JSON.parse(localStorage.getItem('settings') ?? '{}'));
+					try {
+						settings.set(JSON.parse(localStorage.getItem('settings') ?? '{}'));
+					} catch {
+						settings.set({});
+					}
 				}
 				setTextScale($settings?.textScale ?? 1);
 
