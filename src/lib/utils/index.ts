@@ -1822,6 +1822,19 @@ export const initMermaid = async () => {
 		startOnLoad: false, // Should be false when using render API
 		theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
 		securityLevel: 'loose',
+		flowchart: {
+			// Use native SVG <text> labels instead of HTML (<foreignObject>) labels.
+			// HTML labels are measured in a throwaway DOM node and the node box does
+			// not reliably grow when the text wraps to extra lines, so long labels
+			// get clipped (e.g. the last line cut off). Native SVG labels are sized
+			// deterministically from the wrapped line count, so boxes grow to fit.
+			// This also produces cleaner PNGs since there are no foreignObjects to
+			// rasterize.
+			htmlLabels: false,
+			useMaxWidth: true,
+			wrappingWidth: 200,
+			padding: 10,
+		},
 	});
 	return mermaid;
 };
@@ -1989,14 +2002,29 @@ export const svgToPng = (svgString: string, scale = 2): Promise<string> => {
 		const doc = parser.parseFromString(svgString, 'image/svg+xml');
 		const svgEl = doc.documentElement;
 
-		// Read natural size from the SVG attributes or viewBox.
-		let width = parseFloat(svgEl.getAttribute('width') || '0');
-		let height = parseFloat(svgEl.getAttribute('height') || '0');
-		if ((!width || !height) && svgEl.getAttribute('viewBox')) {
-			const parts = svgEl.getAttribute('viewBox')!.split(/[\s,]+/);
-			width = width || parseFloat(parts[2]) || 800;
-			height = height || parseFloat(parts[3]) || 600;
+		// Determine the natural size for the canvas. The viewBox is the source of
+		// truth for the aspect ratio: mermaid sets width="100%" on the <svg>, and
+		// parseFloat("100%") === 100, which would otherwise be used as a 100px
+		// width and squish the diagram into a tall, narrow strip. So read the
+		// viewBox first and only fall back to the width/height attributes when
+		// they are absolute pixel values (never percentages).
+		const parsePx = (value: string | null): number => {
+			if (!value) return 0;
+			if (value.trim().endsWith('%')) return 0;
+			const n = parseFloat(value);
+			return Number.isFinite(n) ? n : 0;
+		};
+
+		let width = 0;
+		let height = 0;
+		const viewBox = svgEl.getAttribute('viewBox');
+		if (viewBox) {
+			const parts = viewBox.split(/[\s,]+/);
+			width = parseFloat(parts[2]) || 0;
+			height = parseFloat(parts[3]) || 0;
 		}
+		if (!width) width = parsePx(svgEl.getAttribute('width'));
+		if (!height) height = parsePx(svgEl.getAttribute('height'));
 		width = width || 800;
 		height = height || 600;
 
