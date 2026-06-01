@@ -1878,6 +1878,104 @@ export const renderVegaVisualization = async (spec: string, i18n?: any) => {
 };
 
 /**
+ * Replace every <foreignObject> (mermaid's HTML label container) with a native
+ * SVG <text> element so the label survives SVG→PNG rasterization.
+ *
+ * When an SVG is loaded through an <img> element and drawn onto a canvas, the
+ * HTML inside <foreignObject> is not rendered, so any text it holds disappears
+ * from the resulting PNG. Mermaid puts ALL node/edge label text inside
+ * foreignObjects by default, which is why diagrams rasterize as empty boxes.
+ *
+ * We read the text (preserving line breaks) and the foreignObject's own
+ * width/height (mermaid centers labels inside this box) and emit a centered
+ * <text>/<tspan> equivalent.
+ */
+const convertForeignObjectsToSvgText = (doc: Document) => {
+	const SVG_NS = 'http://www.w3.org/2000/svg';
+	// Pick a label colour that contrasts with the current theme background.
+	const isDark =
+		typeof document !== 'undefined' &&
+		document.documentElement.classList.contains('dark');
+	const defaultFill = isDark ? '#e5e7eb' : '#1f2937';
+
+	const extractLines = (root: Element): string[] => {
+		// Walk the HTML subtree, breaking lines on <br> and block-level elements.
+		const lines: string[] = [];
+		let current = '';
+		const flush = () => {
+			const trimmed = current.replace(/\s+/g, ' ').trim();
+			if (trimmed) lines.push(trimmed);
+			current = '';
+		};
+		const walk = (node: Node) => {
+			if (node.nodeType === Node.TEXT_NODE) {
+				current += node.textContent ?? '';
+				return;
+			}
+			if (node.nodeType !== Node.ELEMENT_NODE) return;
+			const el = node as Element;
+			const tag = el.tagName.toLowerCase();
+			if (tag === 'br') {
+				flush();
+				return;
+			}
+			const isBlock = tag === 'p' || tag === 'div';
+			if (isBlock && current.trim()) flush();
+			Array.from(el.childNodes).forEach(walk);
+			if (isBlock) flush();
+		};
+		walk(root);
+		flush();
+		return lines.length ? lines : [];
+	};
+
+	Array.from(doc.querySelectorAll('foreignObject')).forEach((fo) => {
+		const lines = extractLines(fo);
+
+		const foWidth = parseFloat(fo.getAttribute('width') || '0') || 0;
+		const foHeight = parseFloat(fo.getAttribute('height') || '0') || 0;
+		const foX = parseFloat(fo.getAttribute('x') || '0') || 0;
+		const foY = parseFloat(fo.getAttribute('y') || '0') || 0;
+
+		// Try to inherit an explicit colour from an inline style, else theme default.
+		let fill = defaultFill;
+		const styled = fo.querySelector('[style*="color"]') as HTMLElement | null;
+		const inlineColor = styled?.style?.color;
+		if (inlineColor) fill = inlineColor;
+
+		if (!lines.length) {
+			fo.remove();
+			return;
+		}
+
+		const lineHeight = 16;
+		const cx = foX + foWidth / 2;
+		const cy = foY + foHeight / 2;
+		// Vertically center the block of lines around cy.
+		const startDy = -((lines.length - 1) * lineHeight) / 2;
+
+		const text = doc.createElementNS(SVG_NS, 'text');
+		text.setAttribute('x', String(cx));
+		text.setAttribute('y', String(cy));
+		text.setAttribute('text-anchor', 'middle');
+		text.setAttribute('dominant-baseline', 'central');
+		text.setAttribute('font-family', 'sans-serif');
+		text.setAttribute('font-size', '14px');
+		text.setAttribute('fill', fill);
+
+		lines.forEach((line, i) => {
+			const tspan = doc.createElementNS(SVG_NS, 'tspan');
+			tspan.setAttribute('x', String(cx));
+			tspan.setAttribute('dy', i === 0 ? String(startDy) : String(lineHeight));
+			tspan.textContent = line;
+			text.appendChild(tspan);
+		});
+
+		fo.replaceWith(text);
+	});
+};
+
+/**
  * Convert an SVG string to a PNG data URI via an off-screen canvas.
  *
  * Uses a data-URI (not Blob URL) so the canvas is never tainted by
@@ -1902,9 +2000,14 @@ export const svgToPng = (svgString: string, scale = 2): Promise<string> => {
 		width = width || 800;
 		height = height || 600;
 
-		// Strip any foreignObject elements — they cause the canvas to be
-		// tainted on most browsers regardless of the loading method.
-		doc.querySelectorAll('foreignObject').forEach((fo) => fo.remove());
+		// Mermaid renders node/edge labels as HTML inside <foreignObject>.
+		// A foreignObject cannot be rasterized when the SVG is loaded via an
+		// <img> (the browser either taints the canvas or, more commonly, simply
+		// drops the HTML content), which is why these labels otherwise vanish
+		// from the PNG — leaving empty boxes. Rather than removing them (which
+		// loses all the text), convert each foreignObject's text into a native
+		// SVG <text> element so the labels survive rasterization.
+		convertForeignObjectsToSvgText(doc);
 
 		const cleanSvg = new XMLSerializer().serializeToString(doc);
 		const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(cleanSvg);
