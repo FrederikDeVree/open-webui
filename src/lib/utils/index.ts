@@ -1821,7 +1821,28 @@ export const initMermaid = async () => {
 	mermaid.initialize({
 		startOnLoad: false, // Should be false when using render API
 		theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-		securityLevel: 'loose'
+		securityLevel: 'loose',
+		// Allow long node labels to wrap inside their box instead of overflowing/being clipped.
+		// We deliberately use htmlLabels: false so labels render as native SVG <text>/<tspan>
+		// elements rather than HTML inside <foreignObject>. This is required for two reasons:
+		//   1. The PNG conversion path (svgToPng) strips <foreignObject> to avoid
+		//      tainted-canvas SecurityErrors, which would otherwise erase all labels
+		//      in the screenshot sent to the vision LLM for verification.
+		//   2. Native SVG text honors getBBox correctly so node sizing wraps properly.
+		flowchart: {
+			htmlLabels: false,
+			useMaxWidth: true
+		},
+		sequence: {
+			wrap: true,
+			useMaxWidth: true
+		},
+		gantt: {
+			useMaxWidth: true
+		},
+		class: {
+			useMaxWidth: true
+		}
 	});
 	return mermaid;
 };
