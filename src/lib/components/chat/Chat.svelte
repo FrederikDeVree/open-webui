@@ -184,6 +184,7 @@
 	let files = [];
 	let params = {};
 
+
 	$: if (chatIdProp) {
 		navigateHandler();
 	}
@@ -2855,6 +2856,9 @@
 
 	const saveControls = async () => {
 		if (!$chatId || $temporaryChatEnabled) return;
+		const loaded = chat?.chat ?? {};
+		if (equal(params, loaded.params ?? {}) && equal(chatFiles, loaded.files ?? [])) return;
+
 		await updateChatById(localStorage.token, $chatId, { params, files: chatFiles }).catch((err) =>
 			console.error('[controls autosave]', err)
 		);
