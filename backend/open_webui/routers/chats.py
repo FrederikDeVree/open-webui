@@ -32,8 +32,17 @@ from open_webui.internal.db import get_async_session
 
 from open_webui.config import ENABLE_ADMIN_CHAT_ACCESS, ENABLE_ADMIN_EXPORT
 from open_webui.constants import ERROR_MESSAGES
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from pydantic import BaseModel
+
+
+class BulkChatIdsForm(BaseModel):
+    chat_ids: list[str]
+
+
+class BulkChatFolderForm(BaseModel):
+    chat_ids: list[str]
+    folder_id: str | None = None
 
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
@@ -1584,3 +1593,102 @@ async def delete_all_tags_by_id(
         return True
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)
+
+
+############################
+# Bulk Delete Chats
+############################
+
+
+@router.delete('/bulk', response_model=bool)
+async def delete_bulk_chats(
+    form_data: BulkChatIdsForm,
+    request: Request,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if user.role == 'admin' and not await has_permission(
+        user.id, 'chat.delete', request.app.state.config.USER_PERMISSIONS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+        )
+    result = await Chats.bulk_delete_chats_by_id_and_user_id(form_data.chat_ids, user.id, db=db)
+    return result
+
+
+############################
+# Bulk Archive Chats
+############################
+
+
+@router.post('/bulk/archive', response_model=bool)
+async def bulk_archive_chats(
+    form_data: BulkChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await Chats.bulk_archive_chats_by_id_and_user_id(form_data.chat_ids, user.id, db=db)
+    return result
+
+
+############################
+# Bulk Unarchive Chats
+############################
+
+
+@router.post('/bulk/unarchive', response_model=bool)
+async def bulk_unarchive_chats(
+    form_data: BulkChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await Chats.bulk_unarchive_chats_by_id_and_user_id(form_data.chat_ids, user.id, db=db)
+    return result
+
+
+############################
+# Bulk Pin Chats
+############################
+
+
+@router.post('/bulk/pin', response_model=bool)
+async def bulk_pin_chats(
+    form_data: BulkChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await Chats.bulk_toggle_pin_chats_by_id_and_user_id(form_data.chat_ids, user.id, db=db)
+    return result
+
+
+############################
+# Bulk Set Pin Chats
+############################
+
+
+@router.post('/bulk/set-pin', response_model=bool)
+async def bulk_set_pin_chats(
+    form_data: BulkChatIdsForm,
+    pinned: bool = Query(True),
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await Chats.bulk_set_pin_chats_by_id_and_user_id(form_data.chat_ids, user.id, pinned, db=db)
+    return result
+
+
+############################
+# Bulk Move Chats
+############################
+
+
+@router.post('/bulk/move', response_model=bool)
+async def bulk_move_chats(
+    form_data: BulkChatFolderForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    result = await Chats.bulk_move_chats_by_id_and_user_id(form_data.chat_ids, user.id, form_data.folder_id, db=db)
+    return result

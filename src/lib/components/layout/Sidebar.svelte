@@ -29,7 +29,9 @@
 		selectedFolder,
 		WEBUI_NAME,
 		sidebarWidth,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds,
+		lastClickedChatId
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -44,7 +46,14 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		bulkDeleteChats,
+		bulkArchiveChats,
+		bulkTogglePinChats,
+		bulkMoveChats,
+		archiveChatById,
+		deleteChatById,
+		toggleChatPinnedStatusById as bulkPinChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -59,6 +68,7 @@
 	import Spinner from '../common/Spinner.svelte';
 	import Loader from '../common/Loader.svelte';
 	import Folder from '../common/Folder.svelte';
+	import FolderIcon from '../icons/Folder.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import Folders from './Sidebar/Folders.svelte';
 	import { getChannels, createNewChannel } from '$lib/apis/channels';
@@ -450,7 +460,131 @@
 		checkDirection();
 	};
 
+	const onFocus = () => {};
+
+	const onBlur = () => {
+		shiftKey = false;
+		selectedChatId = null;
+	};
+
+	// Multi-select state
+	$: multiSelectCount = $selectedChatIds.size;
+	let showMoveFolderModal = false;
+	let moveFolderId = null;
+	let actionInFlight = false;
+
+	const clearSelection = () => {
+		$selectedChatIds.clear();
+		selectedChatIds.set($selectedChatIds);
+		lastClickedChatId.set(null);
+	};
+
+	const deleteSelectedChats = async () => {
+		if (actionInFlight || multiSelectCount === 0) return;
+		actionInFlight = true;
+
+		const chatIds = [...$selectedChatIds];
+		try {
+			await bulkDeleteChats(localStorage.token, chatIds);
+			toast.success($i18n.t('Chats deleted successfully.'));
+		} catch (error) {
+			console.error('Bulk delete failed:', error);
+			toast.error(error?.detail || $i18n.t('Failed to delete chats.'));
+		} finally {
+			clearSelection();
+			initChatList();
+			actionInFlight = false;
+		}
+	};
+
+	const archiveSelectedChats = async () => {
+		if (actionInFlight || multiSelectCount === 0) return;
+		actionInFlight = true;
+
+		const chatIds = [...$selectedChatIds];
+		try {
+			await bulkArchiveChats(localStorage.token, chatIds);
+			toast.success($i18n.t('Chats archived successfully.'));
+		} catch (error) {
+			console.error('Bulk archive failed:', error);
+			toast.error(error?.detail || $i18n.t('Failed to archive chats.'));
+		} finally {
+			clearSelection();
+			initChatList();
+			actionInFlight = false;
+		}
+	};
+
+	const togglePinSelectedChats = async () => {
+		if (actionInFlight || multiSelectCount === 0) return;
+		actionInFlight = true;
+
+		const chatIds = [...$selectedChatIds];
+		try {
+			// Individual toggle per chat (some may be pinned, some not)
+			// For simplicity, toggle each one
+			await Promise.all(
+				chatIds.map((id) => toggleChatPinnedStatusById(localStorage.token, id))
+			);
+			toast.success($i18n.t('Chats updated successfully.'));
+		} catch (error) {
+			console.error('Bulk pin toggle failed:', error);
+			toast.error(error?.detail || $i18n.t('Failed to update chats.'));
+		} finally {
+			clearSelection();
+			initChatList();
+			actionInFlight = false;
+		}
+	};
+
+	const moveSelectedChats = async () => {
+		if (actionInFlight || multiSelectCount === 0) return;
+		actionInFlight = true;
+
+		const chatIds = [...$selectedChatIds];
+		try {
+			await bulkMoveChats(localStorage.token, chatIds, moveFolderId);
+			toast.success($i18n.t('Chats moved successfully.'));
+		} catch (error) {
+			console.error('Bulk move failed:', error);
+			toast.error(error?.detail || $i18n.t('Failed to move chats.'));
+		} finally {
+			clearSelection();
+			initChatList();
+			showMoveFolderModal = false;
+			actionInFlight = false;
+		}
+	};
+
 	const onKeyDown = (e) => {
+		// Only handle keyboard shortcuts when sidebar is visible
+		if (!$showSidebar) return;
+
+		// Ctrl+A / Cmd+A to select all chats
+		if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+			e.preventDefault();
+			const allChatIds = [
+				...$pinnedChats.map((c) => c.id),
+				...($chats ?? []).map((c) => c.id)
+			];
+			$selectedChatIds.clear();
+			allChatIds.forEach((id) => $selectedChatIds.add(id));
+			selectedChatIds.set($selectedChatIds);
+			return;
+		}
+
+		// Escape to clear selection
+		if (e.key === 'Escape' && multiSelectCount > 0) {
+			clearSelection();
+			return;
+		}
+
+		// Delete key to bulk delete
+		if (e.key === 'Delete' && multiSelectCount > 0 && !e.ctrlKey && !e.metaKey) {
+			deleteSelectedChats();
+		}
+
+		// Shift+click handling happens in ChatItem, but we track shiftKey globally
 		if (e.key === 'Shift') {
 			shiftKey = true;
 		}
@@ -460,13 +594,6 @@
 		if (e.key === 'Shift') {
 			shiftKey = false;
 		}
-	};
-
-	const onFocus = () => {};
-
-	const onBlur = () => {
-		shiftKey = false;
-		selectedChatId = null;
 	};
 
 	const MIN_WIDTH = 220;
@@ -579,6 +706,8 @@
 			})
 		];
 
+		window.addEventListener('keydown', onKeyDown);
+		window.addEventListener('keyup', onKeyUp);
 		window.addEventListener('keydown', onKeyDown);
 		window.addEventListener('keyup', onKeyUp);
 
@@ -1481,6 +1610,7 @@
 												updatedAt={chat.updated_at}
 												lastReadAt={chat.last_read_at}
 												{shiftKey}
+												isMultiSelecting={multiSelectCount > 0}
 												selected={selectedChatId === chat.id}
 												on:select={() => {
 													selectedChatId = chat.id;
@@ -1544,6 +1674,7 @@
 										updatedAt={chat.updated_at}
 										lastReadAt={chat.last_read_at}
 										{shiftKey}
+										isMultiSelecting={multiSelectCount > 0}
 										selected={selectedChatId === chat.id}
 										on:select={() => {
 											selectedChatId = chat.id;
@@ -1589,6 +1720,133 @@
 					</div>
 				</Folder>
 			</div>
+
+			<!-- Bulk Action Bar -->
+			{#if multiSelectCount > 0}
+				<div
+					class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 dark:bg-gray-800 text-white rounded-2xl px-4 py-2.5 shadow-xl border border-gray-700 dark:border-gray-700 flex items-center gap-3 animate-in slide-in-from-bottom-4 fade-in duration-200"
+				>
+					<div class="flex items-center gap-2 text-sm">
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-blue-400">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />
+						</svg>
+						<span class="font-medium">{multiSelectCount} selected</span>
+					</div>
+
+					<!-- Delete -->
+					<button
+						class="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-300 hover:text-red-400 transition"
+						on:click={deleteSelectedChats}
+						disabled={actionInFlight}
+						title="Delete"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4.5 h-4.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+						</svg>
+						<Tooltip content={$i18n.t('Delete {COUNT} chats', { COUNT: multiSelectCount })} placement="top" />
+					</button>
+
+					<!-- Archive -->
+					<button
+						class="p-1.5 rounded-lg hover:bg-amber-500/20 text-gray-300 hover:text-amber-400 transition"
+						on:click={archiveSelectedChats}
+						disabled={actionInFlight}
+						title="Archive"
+					>
+						<ArchiveBox className="size-4.5" strokeWidth="2" />
+						<Tooltip content={$i18n.t('Archive {COUNT} chats', { COUNT: multiSelectCount })} placement="top" />
+					</button>
+
+					<!-- Pin -->
+					<button
+						class="p-1.5 rounded-lg hover:bg-blue-500/20 text-gray-300 hover:text-blue-400 transition"
+						on:click={togglePinSelectedChats}
+						disabled={actionInFlight}
+						title="Pin/Unpin"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4.5 h-4.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.563.563 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.563.563 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+						</svg>
+						<Tooltip content={$i18n.t('Pin/Unpin {COUNT} chats', { COUNT: multiSelectCount })} placement="top" />
+					</button>
+
+					<!-- Move -->
+					<button
+						class="p-1.5 rounded-lg hover:bg-green-500/20 text-gray-300 hover:text-green-400 transition"
+						on:click={() => { showMoveFolderModal = true; }}
+						disabled={actionInFlight}
+						title="Move to folder"
+					>
+						<FolderIcon className="size-4.5" strokeWidth="2" />
+						<Tooltip content={$i18n.t('Move {COUNT} chats to folder', { COUNT: multiSelectCount })} placement="top" />
+					</button>
+
+					<!-- Clear selection -->
+					<button
+						class="p-1.5 rounded-lg hover:bg-gray-700 text-gray-300 hover:text-white transition"
+						on:click={clearSelection}
+						title="Clear selection"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4.5 h-4.5">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+
+				<!-- Move Folder Modal -->
+				{#if showMoveFolderModal}
+					<div
+						class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
+						on:click={(e) => { if (e.target === e.currentTarget) showMoveFolderModal = false; }}
+					>
+						<div class="bg-white dark:bg-gray-800 rounded-2xl p-6 w-[360px] max-h-[80vh] flex flex-col border border-gray-200 dark:border-gray-700 shadow-xl">
+							<h3 class="text-base font-semibold mb-4">{$i18n.t('Move chats to folder')}</h3>
+
+							{#if $folders.length > 0}
+								<div class="flex-1 overflow-y-auto scrollbar-hidden space-y-1">
+									{#each $folders.sort((a, b) => b.updated_at - a.updated_at) as folder}
+										<button
+												class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition text-left"
+												on:click={() => {
+													moveFolderId = folder.id;
+													moveSelectedChats();
+												}}
+											>
+												<FolderIcon className="size-4" strokeWidth="2" />
+												<span class="truncate">{folder.name}</span>
+											</button>
+										{/each}
+									</div>
+							{:else}
+								<p class="text-sm text-gray-500 mb-3">{$i18n.t('No folders available')}</p>
+							{/if}
+
+							<!-- Move to root (unfolder) -->
+							<button
+									class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition text-left mt-2"
+									on:click={() => {
+										moveFolderId = null;
+										moveSelectedChats();
+									}}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+										<path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+									</svg>
+									<span>{$i18n.t('Move to root folder')}</span>
+								</button>
+
+								<div class="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+									<button
+											class="px-4 py-2 text-sm rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+											on:click={() => { showMoveFolderModal = false; moveFolderId = null; }}
+										>
+											{$i18n.t('Cancel')}
+										</button>
+									</div>
+						</div>
+					</div>
+				{/if}
+			{/if}
 
 			<div class="px-1.5 pt-1.5 pb-2 sticky bottom-0 z-10 -mt-3 sidebar">
 				<div

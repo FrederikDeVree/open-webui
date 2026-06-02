@@ -35,7 +35,9 @@
 		currentChatPage,
 		tags,
 		selectedFolder,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds,
+		lastClickedChatId
 	} from '$lib/stores';
 
 	import ChatMenu from './ChatMenu.svelte';
@@ -62,6 +64,11 @@
 
 	export let selected = false;
 	export let shiftKey = false;
+	export let isMultiSelecting = false;
+
+	$: isSelected = isMultiSelecting && $selectedChatIds.has(id);
+	$: $selectedChatIds.delete(id);
+	$: $selectedChatIds.add(id);
 
 	export let onDragEnd = () => {};
 
@@ -450,24 +457,79 @@
 			class=" w-full flex justify-between rounded-xl px-[11px] py-[6px] {id === $chatId ||
 			confirmEdit
 				? 'bg-gray-100 dark:bg-gray-900 selected'
-				: selected
-					? 'bg-gray-100 dark:bg-gray-950 selected'
-					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
+				: isMultiSelecting && isSelected
+					? 'bg-blue-100 dark:bg-blue-900/30'
+					: selected
+						? 'bg-gray-100 dark:bg-gray-950 selected'
+						: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
 			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
+			on:click={(e) => {
+				if (isMultiSelecting) {
+					e.preventDefault();
+					e.stopImmediatePropagation();
 
-				if ($selectedFolder) {
-					selectedFolder.set(null);
+					if (shiftKey) {
+						// Shift-click: range select from lastClickedChatId to this one
+						const lastId = $lastClickedChatId;
+						if (lastId) {
+							// Get all chat IDs in order from both stores
+							const pinnedList = $pinnedChats.map((c) => c.id);
+							const regularList = ($chats ?? []).map((c) => c.id);
+
+							let startIdx = -1;
+							let endIdx = -1;
+
+							const findIdx = (list, id) => {
+								const i = list.indexOf(id);
+								return i === -1 ? list.length : i;
+							};
+
+							startIdx = findIdx([...pinnedList, ...regularList], lastId);
+							endIdx = findIdx([...pinnedList, ...regularList], id);
+
+							if (startIdx === -1) startIdx = 0;
+							if (endIdx === -1) endIdx = 0;
+
+							const min = Math.min(startIdx, endIdx);
+							const max = Math.max(startIdx, endIdx);
+
+							// Select all chats in range
+							for (let i = min; i <= max; i++) {
+								const allChats = [...pinnedList, ...regularList];
+								if (i < allChats.length) {
+									$selectedChatIds.add(allChats[i]);
+								}
+							}
+
+							// Clear any single-selection if not already included
+							selectedChatIds.set($selectedChatIds);
+							lastClickedChatId.set(id);
+						}
+					} else {
+						// Click without shift: clear all and select just this one
+						$selectedChatIds.clear();
+						$selectedChatIds.add(id);
+						lastClickedChatId.set(id);
+					}
+
+					// Optimistically mark as read
+					unread = false;
+					lastReadAt = Date.now() / 1000;
+				} else {
+					dispatch('select');
+
+					if ($selectedFolder) {
+						selectedFolder.set(null);
+					}
+
+					if ($mobile) {
+						showSidebar.set(false);
+					}
+
+					// Optimistically mark as read in UI when clicked
+					unread = false;
+					lastReadAt = Date.now() / 1000;
 				}
-
-				if ($mobile) {
-					showSidebar.set(false);
-				}
-
-				// Optimistically mark as read in UI when clicked
-				unread = false;
-				lastReadAt = Date.now() / 1000;
 			}}
 			on:dblclick={async (e) => {
 				e.preventDefault();

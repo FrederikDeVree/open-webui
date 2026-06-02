@@ -13,6 +13,7 @@ from open_webui.models.tags import TagModel, Tag, Tags
 from open_webui.models.folders import Folders
 from open_webui.models.chat_messages import ChatMessage, ChatMessages
 from open_webui.models.automations import AutomationRun
+from open_webui.models.shared_chats import SharedChat as SharedChatTable
 from open_webui.utils.misc import sanitize_data_for_db, sanitize_text_for_db
 
 from pydantic import BaseModel, ConfigDict
@@ -1695,6 +1696,137 @@ class ChatTable:
             if row is None or row[0] is None:
                 return []
             return row[0]
+
+
+    async def bulk_delete_chats_by_id_and_user_id(
+        self, chat_ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Delete multiple chats by their IDs for a given user."""
+        try:
+            async with get_async_db_context(db) as db:
+                stmt = Chat.id.in_(chat_ids) & (Chat.user_id == user_id)
+
+                # Gather tag info before deletion for orphan cleanup
+                tag_map = {}
+                for chat_id in chat_ids:
+                    chat = await db.execute(select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id))
+                    c = chat.scalar_one_or_none()
+                    if c:
+                        tags = c.meta.get('tags', [])
+                        for t in tags:
+                            tag_map[t] = tag_map.get(t, 0) + 1
+
+                # Delete related records
+                await db.execute(update(AutomationRun).filter(AutomationRun.chat_id.in_(chat_ids)).values(chat_id=None))
+                await db.execute(delete(ChatMessage).filter(ChatMessage.chat_id.in_(chat_ids)))
+
+                # Delete shared chat snapshots
+                shared_result = await db.execute(
+                    select(SharedChatTable).filter(SharedChatTable.chat_id.in_(chat_ids))
+                )
+                shared_ids = [r.id for r in shared_result.scalars().all()]
+                if shared_ids:
+                    await db.execute(delete(SharedChatTable).filter(SharedChatTable.id.in_(shared_ids)))
+                    await db.execute(update(Chat).filter(Chat.id.in_(chat_ids)).values(share_id=None))
+
+                # Delete the chats
+                await db.execute(delete(Chat).where(stmt))
+                await db.commit()
+
+                # Clean up orphan tags
+                if tag_map:
+                    orphans = [t for t, count in tag_map.items() if count == 1]
+                    if orphans:
+                        await Tags.delete_tags_by_ids_and_user_id(orphans, user_id, db=db)
+
+                return True
+        except Exception:
+            return False
+
+    async def bulk_archive_chats_by_id_and_user_id(
+        self, chat_ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Archive multiple chats by their IDs for a given user."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .where(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(archived=True, folder_id=None)
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def bulk_unarchive_chats_by_id_and_user_id(
+        self, chat_ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Un-archive multiple chats by their IDs for a given user."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .where(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(archived=False)
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def bulk_toggle_pin_chats_by_id_and_user_id(
+        self, chat_ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Toggle pinned status for multiple chats by their IDs for a given user."""
+        try:
+            async with get_async_db_context(db) as db:
+                now = int(time.time())
+                # Toggle: set pinned = NOT pinned for current value
+                # We need to do this individually since SQL doesn't easily toggle with IN
+                for chat_id in chat_ids:
+                    chat = await db.execute(select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id))
+                    c = chat.scalar_one_or_none()
+                    if c:
+                        c.pinned = not c.pinned
+                        c.updated_at = now
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def bulk_set_pin_chats_by_id_and_user_id(
+        self, chat_ids: list[str], user_id: str, pinned: bool, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Set pinned status for multiple chats."""
+        try:
+            async with get_async_db_context(db) as db:
+                now = int(time.time())
+                await db.execute(
+                    update(Chat)
+                    .where(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(pinned=pinned, updated_at=now)
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def bulk_move_chats_by_id_and_user_id(
+        self, chat_ids: list[str], user_id: str, folder_id: Optional[str], db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Move multiple chats to a folder."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .where(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(folder_id=folder_id, pinned=False, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
 
 
 Chats = ChatTable()
