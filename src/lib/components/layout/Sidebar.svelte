@@ -44,7 +44,13 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		batchDeleteChats,
+		batchArchiveChats,
+		batchUnarchiveChats,
+		batchPinChats,
+		batchUnpinChats,
+		batchMoveChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -105,6 +111,147 @@
 	let newFolderId = null;
 
 	$: pinnedItems = $settings?.pinnedMenuItems ?? DEFAULT_PINNED_ITEMS;
+
+	let multiSelectionMode = false;
+	let selectedChatIds = [];
+	let lastSelectedIndex = -1;
+	let showBatchMoveModal = false;
+	let batchMoveFolderId = null;
+	let batchActionConfirm = null;
+
+	const toggleMultiSelectMode = () => {
+		multiSelectionMode = !multiSelectionMode;
+		if (!multiSelectionMode) {
+			selectedChatIds = [];
+			lastSelectedIndex = -1;
+		}
+	};
+
+	const handleChatSelect = (e, chat, index, list = 'main') => {
+		if (!multiSelectionMode) {
+			return;
+		}
+
+		e.preventDefault();
+		e.stopPropagation();
+
+		let allChatsForSidebar = [];
+		if (list === 'pinned' && $pinnedChats) {
+			allChatsForSidebar = [...$pinnedChats];
+		} else if (list === 'main' && $chats) {
+			allChatsForSidebar = [...$chats];
+		}
+
+		const flatIndex = list === 'pinned' ? index : index + ($pinnedChats?.length || 0);
+
+		if (e.shiftKey && lastSelectedIndex !== -1) {
+			const startIdx = Math.min(lastSelectedIndex, flatIndex);
+			const endIdx = Math.max(lastSelectedIndex, flatIndex);
+
+			const startPinnedCount = $pinnedChats?.length || 0;
+			if (startIdx < startPinnedCount) {
+				for (let i = startIdx; i <= Math.min(endIdx, startPinnedCount - 1); i++) {
+					if ($pinnedChats && !$pinnedChats[i].id) continue;
+					const chatId = $pinnedChats[i].id;
+					if (!selectedChatIds.includes(chatId)) {
+						selectedChatIds = [...selectedChatIds, chatId];
+					}
+				}
+			} else {
+				for (let i = startIdx - startPinnedCount; i <= endIdx - startPinnedCount; i++) {
+					if (i >= 0 && i < $chats?.length && $chats[i]) {
+						const chatId = $chats[i].id;
+						if (!selectedChatIds.includes(chatId)) {
+							selectedChatIds = [...selectedChatIds, chatId];
+						}
+					}
+				}
+			}
+		} else if (e.ctrlKey || e.metaKey) {
+			if (selectedChatIds.includes(chat.id)) {
+				selectedChatIds = selectedChatIds.filter((id) => id !== chat.id);
+			} else {
+				selectedChatIds = [...selectedChatIds, chat.id];
+			}
+			lastSelectedIndex = flatIndex;
+		} else {
+			if (selectedChatIds.length === 0 || !selectedChatIds.includes(chat.id)) {
+				selectedChatIds = [chat.id];
+			} else {
+				selectedChatIds = [];
+			}
+			lastSelectedIndex = flatIndex;
+		}
+	};
+
+	const selectChatFromAll = (chat) => {
+		const allChats = [...($pinnedChats || []), ...($chats || [])];
+		const index = allChats.findIndex((c) => c.id === chat.id);
+		const isInPinned = ($pinnedChats || []).some((c) => c.id === chat.id);
+		const list = isInPinned ? 'pinned' : 'main';
+		const indexInList = list === 'pinned'
+			? allChats.findIndex((c) => c.id === chat.id)
+			: allChats.findIndex((c) => c.id === chat.id) - ($pinnedChats?.length || 0);
+
+		return { chat, index, list, indexInList };
+	};
+
+	const rangeSelect = (chatId, targetIndex, list = 'main') => {
+		if (lastSelectedIndex === -1) {
+			lastSelectedIndex = targetIndex;
+			if (chatId && !selectedChatIds.includes(chatId)) {
+				selectedChatIds = [...selectedChatIds, chatId];
+			}
+			return;
+		}
+
+		if (targetIndex < lastSelectedIndex) {
+			[targetIndex, lastSelectedIndex] = [lastSelectedIndex, targetIndex];
+		}
+
+		const pinnedCount = $pinnedChats?.length || 0;
+		const startPinned = lastSelectedIndex < pinnedCount;
+		const endPinned = targetIndex < pinnedCount;
+
+		if (startPinned && endPinned) {
+			for (let i = lastSelectedIndex; i <= targetIndex; i++) {
+				const chat = $pinnedChats?.[i];
+				if (chat && !selectedChatIds.includes(chat.id)) {
+					selectedChatIds = [...selectedChatIds, chat.id];
+				}
+			}
+		} else if (startPinned && !endPinned) {
+			for (let i = lastSelectedIndex; i < pinnedCount; i++) {
+				const chat = $pinnedChats?.[i];
+				if (chat && !selectedChatIds.includes(chat.id)) {
+					selectedChatIds = [...selectedChatIds, chat.id];
+				}
+			}
+			for (let i = pinnedCount; i <= targetIndex - pinnedCount; i++) {
+				const chat = $chats?.[i];
+				if (chat && !selectedChatIds.includes(chat.id)) {
+					selectedChatIds = [...selectedChatIds, chat.id];
+				}
+			}
+		} else {
+			for (let i = lastSelectedIndex - pinnedCount; i <= targetIndex - pinnedCount; i++) {
+				const chat = $chats?.[i];
+				if (chat && !selectedChatIds.includes(chat.id)) {
+					selectedChatIds = [...selectedChatIds, chat.id];
+				}
+			}
+		}
+
+		lastSelectedIndex = targetIndex;
+	};
+
+	const ctrlSelectChat = (chatId) => {
+		if (selectedChatIds.includes(chatId)) {
+			selectedChatIds = selectedChatIds.filter((id) => id !== chatId);
+		} else {
+			selectedChatIds = [...selectedChatIds, chatId];
+		}
+	};
 
 	const isMenuItemVisible = (id) => {
 		switch (id) {
@@ -1327,25 +1474,30 @@
 							}
 						}}
 					>
-						<Folders
-							bind:folderRegistry
-							{folders}
-							{shiftKey}
-							onDelete={(folderId) => {
-								selectedFolder.set(null);
-								initChatList();
-							}}
-							on:update={() => {
-								initChatList();
-							}}
-							on:import={(e) => {
-								const { folderId, items } = e.detail;
-								importChatHandler(items, false, folderId);
-							}}
-							on:change={async () => {
-								initChatList();
-							}}
-						/>
+								<Folders
+									bind:folderRegistry
+									{folders}
+									{shiftKey}
+									{multiSelectionMode}
+									{selectedChatIds}
+									{lastSelectedIndex}
+									{rangeSelect}
+									{ctrlSelectChat}
+									onDelete={(folderId) => {
+										selectedFolder.set(null);
+										initChatList();
+									}}
+									on:update={() => {
+										initChatList();
+									}}
+									on:import={(e) => {
+										const { folderId, items } = e.detail;
+										importChatHandler(items, false, folderId);
+									}}
+									on:change={async () => {
+										initChatList();
+									}}
+								/>
 					</Folder>
 				{/if}
 
@@ -1482,11 +1634,19 @@
 												lastReadAt={chat.last_read_at}
 												{shiftKey}
 												selected={selectedChatId === chat.id}
-												on:select={() => {
-													selectedChatId = chat.id;
+												multiSelectionMode={multiSelectionMode}
+												isSelected={selectedChatIds.includes(chat.id)}
+												onSelect={() => {
+													selectedChatIds = selectedChatIds.includes(chat.id)
+														? selectedChatIds.filter((id) => id !== chat.id)
+														: [...selectedChatIds, chat.id];
+													lastSelectedIndex = idx;
 												}}
-												on:unselect={() => {
-													selectedChatId = null;
+												onShiftSelect={() => {
+													rangeSelect(chat.id, idx, 'pinned');
+												}}
+												onCtrlSelect={() => {
+													ctrlSelectChat(chat.id);
 												}}
 												on:change={async () => {
 													initChatList();
@@ -1545,11 +1705,19 @@
 										lastReadAt={chat.last_read_at}
 										{shiftKey}
 										selected={selectedChatId === chat.id}
-										on:select={() => {
-											selectedChatId = chat.id;
+										multiSelectionMode={multiSelectionMode}
+										isSelected={selectedChatIds.includes(chat.id)}
+										onSelect={() => {
+											selectedChatIds = selectedChatIds.includes(chat.id)
+												? selectedChatIds.filter((id) => id !== chat.id)
+												: [...selectedChatIds, chat.id];
+											lastSelectedIndex = allPinnedChats.length + idx;
 										}}
-										on:unselect={() => {
-											selectedChatId = null;
+										onShiftSelect={() => {
+											rangeSelect(chat.id, idx + allPinnedChats.length, 'main');
+										}}
+										onCtrlSelect={() => {
+											ctrlSelectChat(chat.id);
 										}}
 										on:change={async () => {
 											initChatList();

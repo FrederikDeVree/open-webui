@@ -9,6 +9,11 @@
 
 	export let folders = {};
 	export let shiftKey = false;
+	export let multiSelectionMode = false;
+	export let selectedChatIds = [];
+	export let lastSelectedIndex = -1;
+	export let rangeSelect = (chatId, idx) => {};
+	export let ctrlSelectChat = (chatId) => {};
 
 	export let onDelete = (folderId) => {};
 
@@ -49,6 +54,11 @@
 		{shiftKey}
 		{onDelete}
 		{onItemMove}
+		{multiSelectionMode}
+		{selectedChatIds}
+		{lastSelectedIndex}
+		{rangeSelect}
+		{ctrlSelectChat}
 		on:import={(e) => {
 			dispatch('import', e.detail);
 		}}

@@ -733,6 +733,142 @@ class ChatTable:
         except Exception:
             return False
 
+    async def archive_chats_by_ids_and_user_id(
+        self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .filter_by(user_id=user_id)
+                    .filter(Chat.id.in_(ids))
+                    .values(archived=True, folder_id=None, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def unarchive_chats_by_ids_and_user_id(
+        self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .filter_by(user_id=user_id)
+                    .filter(Chat.id.in_(ids))
+                    .values(archived=False, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def pin_chats_by_ids_and_user_id(
+        self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .filter_by(user_id=user_id)
+                    .filter(Chat.id.in_(ids))
+                    .values(pinned=True, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def unpin_chats_by_ids_and_user_id(
+        self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .filter_by(user_id=user_id)
+                    .filter(Chat.id.in_(ids))
+                    .values(pinned=False, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def delete_chats_by_ids_and_user_id(
+        self, ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        try:
+            async with get_async_db_context(db) as db:
+                chat_ids = list(ids)
+                if not chat_ids:
+                    return True
+
+                # Collect tags for orphan cleanup
+                from sqlalchemy import func
+
+                result = await db.execute(
+                    select(Chat.meta).filter_by(user_id=user_id).filter(Chat.id.in_(chat_ids))
+                )
+                all_tags = set()
+                for row in result.all():
+                    if row and row.meta:
+                        tags = row.meta.get('tags', [])
+                        if tags:
+                            all_tags.update(tags)
+
+                # Collect tags before deleting chats
+                tag_list = list(all_tags)
+
+                # Delete shared chats
+                await self.delete_shared_chats_for_ids(chat_ids, db=db)
+
+                # Delete automation runs
+                await db.execute(
+                    update(AutomationRun)
+                    .filter(AutomationRun.chat_id.in_(chat_ids))
+                    .values(chat_id=None)
+                )
+
+                # Delete chat messages
+                await db.execute(delete(ChatMessage).filter(ChatMessage.chat_id.in_(chat_ids)))
+
+                # Delete chats
+                await db.execute(delete(Chat).filter_by(user_id=user_id).filter(Chat.id.in_(chat_ids)))
+                await db.commit()
+
+                # Clean up orphan tags
+                if tag_list:
+                    await self.delete_orphan_tags_for_user(tag_list, user_id, threshold=0, db=db)
+
+                return True
+        except Exception:
+            return False
+
+    async def delete_shared_chats_for_ids(self, ids: list[str], db: Optional[AsyncSession] = None) -> bool:
+        """Delete shared chat snapshots for given IDs."""
+        from open_webui.models.shared_chats import SharedChats, SharedChat as SharedChatTable
+
+        try:
+            async with get_async_db_context(db) as db:
+                # Find share_ids for these chats
+                result = await db.execute(
+                    select(SharedChatTable.id).filter(SharedChatTable.chat_id.in_(ids))
+                )
+                share_ids = [row[0] for row in result.all()]
+
+                if share_ids:
+                    await db.execute(delete(SharedChatTable).filter(SharedChatTable.id.in_(share_ids)))
+
+                    # Clear share_id on chats
+                    await db.execute(update(Chat).filter(Chat.id.in_(ids)).values(share_id=None))
+
+                return True
+        except Exception:
+            return False
+
     async def get_archived_chat_list_by_user_id(
         self,
         user_id: str,

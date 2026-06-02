@@ -59,6 +59,11 @@
 
 	export let onDelete = (e) => {};
 	export let onItemMove = (e) => {};
+	export let multiSelectionMode = false;
+	export let selectedChatIds = [];
+	export let lastSelectedIndex = -1;
+	export let rangeSelect = (chatId, idx) => {};
+	export let ctrlSelectChat = (chatId) => {};
 
 	let folderElement;
 
@@ -677,7 +682,7 @@
 						{/each}
 					{/if}
 
-					{#each chats ?? [] as chat (chat.id)}
+					{#each chats ?? [] as chat, idx (chat.id)}
 						<ChatItem
 							id={chat.id}
 							title={chat.title}
@@ -685,6 +690,22 @@
 							updatedAt={chat.updated_at}
 							lastReadAt={chat.last_read_at}
 							{shiftKey}
+							multiSelectionMode={multiSelectionMode}
+							isSelected={selectedChatIds.includes(chat.id)}
+							onSelect={() => {
+								const idx = selectedChatIds.findIndex(id => id === chat.id);
+								if (idx >= 0) {
+									selectedChatIds.splice(idx, 1);
+								} else {
+									selectedChatIds.push(chat.id);
+								}
+							}}
+							onShiftSelect={() => {
+								rangeSelect(chat.id);
+							}}
+							onCtrlSelect={() => {
+								ctrlSelectChat(chat.id);
+							}}
 							on:change={(e) => {
 								dispatch('change', e.detail);
 							}}

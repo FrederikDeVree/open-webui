@@ -1,8 +1,10 @@
 import json
 import logging
+import time
 from typing import Optional
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update
 import asyncio
 from fastapi.responses import StreamingResponse
 
@@ -23,12 +25,13 @@ from open_webui.models.chats import (
     ChatBody,
     ChatHistoryStats,
     MessageStats,
+    Chat,
 )
 from open_webui.models.shared_chats import SharedChats, SharedChatResponse
 from open_webui.models.access_grants import AccessGrants
 from open_webui.models.tags import TagModel, Tags
 from open_webui.models.folders import Folders
-from open_webui.internal.db import get_async_session
+from open_webui.internal.db import get_async_session, get_async_db_context
 
 from open_webui.config import ENABLE_ADMIN_CHAT_ACCESS, ENABLE_ADMIN_EXPORT
 from open_webui.constants import ERROR_MESSAGES
@@ -814,6 +817,92 @@ async def archive_all_chats(user=Depends(get_verified_user), db: AsyncSession = 
 @router.post('/unarchive/all', response_model=bool)
 async def unarchive_all_chats(user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
     return await Chats.unarchive_all_chats_by_user_id(user.id, db=db)
+
+
+############################
+# Batch Archive Chats
+############################
+
+
+class ChatIdsForm(BaseModel):
+    ids: list[str]
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    form_data: ChatIdsForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    if not form_data.ids:
+        return True
+    return await Chats.archive_chats_by_ids_and_user_id(form_data.ids, user.id, db=db)
+
+
+@router.post('/batch/unarchive', response_model=bool)
+async def batch_unarchive_chats(
+    form_data: ChatIdsForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    if not form_data.ids:
+        return True
+    return await Chats.unarchive_chats_by_ids_and_user_id(form_data.ids, user.id, db=db)
+
+
+# MoveChatsToFolder
+
+
+@router.post('/batch/move', response_model=bool)
+async def batch_move_chats(
+    form_data: ChatIdsForm,
+    user=Depends(get_verified_user),
+    folder_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_async_session),
+):
+    if not form_data.ids:
+        return True
+    try:
+        async with get_async_db_context(db) as db:
+            await db.execute(
+                update(Chat)
+                .filter_by(user_id=user.id)
+                .filter(Chat.id.in_(form_data.ids))
+                .values(folder_id=folder_id, updated_at=int(time.time()))
+            )
+            await db.commit()
+            return True
+    except Exception:
+        return False
+
+
+# PinChats
+
+
+@router.post('/batch/pin', response_model=bool)
+async def batch_pin_chats(
+    form_data: ChatIdsForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    if not form_data.ids:
+        return True
+    return await Chats.pin_chats_by_ids_and_user_id(form_data.ids, user.id, db=db)
+
+
+@router.post('/batch/unpin', response_model=bool)
+async def batch_unpin_chats(
+    form_data: ChatIdsForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    if not form_data.ids:
+        return True
+    return await Chats.unpin_chats_by_ids_and_user_id(form_data.ids, user.id, db=db)
+
+
+# Batch Delete Chats
+
+
+@router.delete('/batch', response_model=bool)
+async def batch_delete_chats(
+    form_data: ChatIdsForm, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
+):
+    if not form_data.ids:
+        return True
+    return await Chats.delete_chats_by_ids_and_user_id(form_data.ids, user.id, db=db)
 
 
 ############################

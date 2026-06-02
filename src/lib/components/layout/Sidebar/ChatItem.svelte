@@ -62,6 +62,12 @@
 
 	export let selected = false;
 	export let shiftKey = false;
+	export let multiSelectionMode = false;
+	export let isSelected = false;
+	export let selectIndex = -1;
+	export let onSelect: () => {} = () => {};
+	export let onShiftSelect: () => {} = () => {};
+	export let onCtrlSelect: () => {} = () => {};
 
 	export let onDragEnd = () => {};
 
@@ -408,19 +414,36 @@
 	class=" w-full {className} relative group"
 	draggable={!confirmEdit}
 >
-	{#if confirmEdit}
-		<div
-			id="sidebar-chat-item"
-			class=" w-full flex justify-between rounded-xl px-[11px] py-[6px] {id === $chatId ||
-			confirmEdit
-				? 'bg-gray-100 dark:bg-gray-900 selected'
-				: selected
-					? 'bg-gray-100 dark:bg-gray-950 selected'
-					: 'group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis relative {generating
-				? 'cursor-not-allowed'
-				: ''}"
-		>
-			<input
+		{#if confirmEdit}
+			<div
+				id="sidebar-chat-item"
+				class=" w-full flex justify-between rounded-xl px-[11px] py-[6px] {id === $chatId ||
+				confirmEdit
+					? 'bg-gray-100 dark:bg-gray-900 selected'
+					: selected
+						? 'bg-gray-100 dark:bg-gray-950 selected'
+						: 'group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis relative {generating
+					? 'cursor-not-allowed'
+					: ''}"
+			>
+				{#if multiSelectionMode}
+					<div class="shrink-0 self-center pr-2 flex items-center">
+						<input
+							type="checkbox"
+							class="size-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+							checked={isSelected}
+							on:change={(e) => {
+								e.stopPropagation();
+								e.preventDefault();
+								onCtrlSelect();
+							}}
+							on:click={(e) => {
+								e.stopPropagation();
+							}}
+						/>
+					</div>
+				{/if}
+				<input
 				id="chat-title-input-{id}"
 				bind:value={chatTitle}
 				class=" bg-transparent w-full outline-hidden mr-10"
@@ -452,22 +475,27 @@
 				? 'bg-gray-100 dark:bg-gray-900 selected'
 				: selected
 					? 'bg-gray-100 dark:bg-gray-950 selected'
-					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
-			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
+					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis relative"
+			href={multiSelectionMode ? '#' : `/c/{id}`}
+			on:click={(e) => {
+				e.stopPropagation();
 
-				if ($selectedFolder) {
-					selectedFolder.set(null);
+				if (multiSelectionMode) {
+					e.preventDefault();
+					onCtrlSelect();
+					return;
 				}
 
-				if ($mobile) {
-					showSidebar.set(false);
+				if (e.ctrlKey || e.metaKey) {
+					e.preventDefault();
+					onCtrlSelect();
+				} else if (e.shiftKey) {
+					e.preventDefault();
+					onShiftSelect();
+				} else if (isSelected) {
+					e.preventDefault();
+					onSelect();
 				}
-
-				// Optimistically mark as read in UI when clicked
-				unread = false;
-				lastReadAt = Date.now() / 1000;
 			}}
 			on:dblclick={async (e) => {
 				e.preventDefault();
