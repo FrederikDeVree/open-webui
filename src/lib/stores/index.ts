@@ -64,6 +64,7 @@ export const pinnedNotes = writable([]);
 export const tags = writable([]);
 export const folders = writable([]);
 
+export const selectedChatIds = writable<Set<string>>(new Set());
 export const selectedFolder = writable(null);
 
 export const models: Writable<Model[]> = writable([]);

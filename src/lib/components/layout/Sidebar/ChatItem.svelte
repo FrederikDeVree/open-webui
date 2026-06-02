@@ -15,6 +15,10 @@
 
 	import {
 		archiveChatById,
+		batchArchiveChats,
+		batchDeleteChats,
+		batchPinChats,
+		batchMoveChats,
 		cloneChatById,
 		deleteChatById,
 		getAllTags,
@@ -35,7 +39,8 @@
 		currentChatPage,
 		tags,
 		selectedFolder,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds
 	} from '$lib/stores';
 
 	import ChatMenu from './ChatMenu.svelte';
@@ -50,6 +55,8 @@
 	import Document from '$lib/components/icons/Document.svelte';
 	import Sparkles from '$lib/components/icons/Sparkles.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import Pin from '$lib/components/icons/Pin.svelte';
+	import ArrowUpOnSquare from '$lib/components/icons/ArrowUpOnSquare.svelte';
 	import { generateTitle } from '$lib/apis';
 
 	export let className = '';
@@ -61,13 +68,12 @@
 	export let lastReadAt: number | null = null;
 
 	export let selected = false;
-	export let shiftKey = false;
 
 	export let onDragEnd = () => {};
 
 	function formatTimeAgo(timestamp: number): string {
 		const now = Date.now();
-		const diff = now - timestamp * 1000; // timestamp is in seconds
+		const diff = now - timestamp * 1000;
 
 		const seconds = Math.floor(diff / 1000);
 		const minutes = Math.floor(seconds / 60);
@@ -87,6 +93,85 @@
 	let chat = null;
 
 	let mouseOver = false;
+
+	// Multi-selection state
+	$: isChecked = $selectedChatIds.has(id);
+
+	// Build combined list for index lookup
+	$: allChatList = [...($pinnedChats ?? []), ...($chats ?? [])];
+	$: chatIndex = allChatList.findIndex((c) => c.id === id);
+
+	// Track last selected index for range selection
+	let lastSelectedIndex = -1;
+	$: if ($selectedChatIds.size > 0) {
+		const lastId = [...$selectedChatIds].pop();
+		lastSelectedIndex = allChatList.findIndex((c) => c.id === lastId);
+	}
+
+	const toggleSelect = (e: MouseEvent) => {
+		e?.stopPropagation();
+		e?.preventDefault();
+
+		$selectedChatIds.update((set) => {
+			const next = new Set(set);
+			if (next.has(id)) {
+				next.delete(id);
+			} else {
+				next.add(id);
+			}
+			return next;
+		});
+
+		lastSelectedIndex = chatIndex;
+	};
+
+	const selectRange = (e: MouseEvent) => {
+		e?.stopPropagation();
+		e?.preventDefault();
+
+		if (lastSelectedIndex >= 0 && chatIndex >= 0) {
+			const start = Math.min(lastSelectedIndex, chatIndex);
+			const end = Math.max(lastSelectedIndex, chatIndex);
+
+			$selectedChatIds.update((set) => {
+				const next = new Set(set);
+				for (let i = start; i <= end; i++) {
+					next.add(allChatList[i].id);
+				}
+				return next;
+			});
+		} else {
+			// No last selection, just select this one
+			$selectedChatIds.update((set) => {
+				const next = new Set(set);
+				next.add(id);
+				return next;
+			});
+		}
+	};
+
+	const handleChatClick = (e: MouseEvent) => {
+		const inSelectionMode = $selectedChatIds.size > 0;
+		const isModifierPressed = e.ctrlKey || e.metaKey;
+
+		// If in selection mode (and no modifier), toggle selection instead of navigating
+		if (inSelectionMode && !isModifierPressed) {
+			e.preventDefault();
+			if (e.shiftKey) {
+				selectRange(e);
+			} else {
+				toggleSelect(e);
+			}
+			lastSelectedIndex = chatIndex;
+			return;
+		}
+		// Normal navigation behavior - let the default click handler below run
+	};
+
+	// Check if this click is on the checkbox
+	const isCheckboxClick = (e: Event) => {
+		return e.target && e.target instanceof Element && e.target.closest('[data-chat-checkbox]');
+	};
 
 	// Local state: tracks the last updatedAt seen while the user was viewing
 	// this chat.  Survives prop refreshes from sidebar data re-fetches that
@@ -257,7 +342,7 @@
 		);
 
 		dragged = true;
-		itemElement.style.opacity = '0.5'; // Optional: Visual cue to show it's being dragged
+		itemElement.style.opacity = '0.5';
 	};
 
 	const onDrag = (event) => {
@@ -270,7 +355,7 @@
 	const onDragEndHandler = (event) => {
 		event.stopPropagation();
 
-		itemElement.style.opacity = '1'; // Reset visual cue after drag
+		itemElement.style.opacity = '1';
 		dragged = false;
 
 		onDragEnd(event);
@@ -445,76 +530,99 @@
 			/>
 		</div>
 	{:else}
-		<a
-			id="sidebar-chat-item"
-			class=" w-full flex justify-between rounded-xl px-[11px] py-[6px] {id === $chatId ||
-			confirmEdit
-				? 'bg-gray-100 dark:bg-gray-900 selected'
-				: selected
+		<div class="w-full flex items-center rounded-xl px-[11px] py-[6px] {id === $chatId ||
+		confirmEdit
+			? 'bg-gray-100 dark:bg-gray-900 selected'
+			: selected
+				? 'bg-gray-100 dark:bg-gray-950 selected'
+				: isChecked
 					? 'bg-gray-100 dark:bg-gray-950 selected'
-					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
-			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
+					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis relative">
+			<!-- Selection checkbox -->
+			<button
+				type="button"
+				class="shrink-0 self-center w-4 h-4 mr-1.5 rounded border border-gray-300 dark:border-gray-600 flex items-center justify-center transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 {isChecked ? 'bg-sky-500 border-sky-500' : ''}"
+				on:click={(e) => {
+					toggleSelect(e);
+				}}
+				aria-label={isChecked ? $i18n.t('Deselect chat') : $i18n.t('Select chat')}
+				on:mousedown={(e) => {
+					e.preventDefault();
+				}}
+			>
+				{#if isChecked}
+					<Check className="size-3" strokeWidth="3" />
+				{/if}
+			</button>
 
-				if ($selectedFolder) {
-					selectedFolder.set(null);
-				}
+			<a
+				id="sidebar-chat-item"
+				class="flex-1 min-w-0 text-sm"
+				href="/c/{id}"
+				on:click={(e) => {
+					handleChatClick(e);
+					if (!$selectedChatIds.size || e.defaultPrevented) {
+						dispatch('select');
 
-				if ($mobile) {
-					showSidebar.set(false);
-				}
+						if ($selectedFolder) {
+							selectedFolder.set(null);
+						}
 
-				// Optimistically mark as read in UI when clicked
-				unread = false;
-				lastReadAt = Date.now() / 1000;
-			}}
-			on:dblclick={async (e) => {
-				e.preventDefault();
-				e.stopPropagation();
+						if ($mobile) {
+							showSidebar.set(false);
+						}
 
-				doubleClicked = true;
-				renameHandler();
-			}}
-			on:mouseenter={(e) => {
-				mouseOver = true;
-			}}
-			on:mouseleave={(e) => {
-				mouseOver = false;
-			}}
-			on:focus={(e) => {}}
-			draggable="false"
-		>
-			<!-- Loading spinner for active chat (left side) -->
-			{#if $activeChatIds.has(id)}
-				<div class="shrink-0 self-center pr-2">
-					<Spinner className="size-3" />
-				</div>
-			{/if}
+						unread = false;
+						lastReadAt = Date.now() / 1000;
+					}
+				}}
+				on:dblclick={async (e) => {
+					e.preventDefault();
+					e.stopPropagation();
 
-			<div class="flex self-center flex-1 w-full min-w-0">
-				{#if unread}
-					<div class="shrink-0 self-center pr-2.5 flex transition-opacity duration-300">
-						<div class="size-1.5 bg-sky-500 rounded-full" />
+					doubleClicked = true;
+					renameHandler();
+				}}
+				on:mouseenter={(e) => {
+					mouseOver = true;
+				}}
+				on:mouseleave={(e) => {
+					mouseOver = false;
+				}}
+				on:focus={(e) => {}}
+				draggable="false"
+			>
+				<!-- Loading spinner for active chat (left side) -->
+				{#if $activeChatIds.has(id)}
+					<div class="shrink-0 self-center pr-2">
+						<Spinner className="size-3" />
 					</div>
 				{/if}
-				<div
-					dir="auto"
-					class="text-left self-center overflow-hidden w-full h-[20px] truncate {unread
-						? 'font-medium text-gray-900 dark:text-gray-100'
-						: ''}"
-				>
-					{title}
-				</div>
-			</div>
 
-			<!-- Time ago indicator -->
-			{#if createdAt && !mouseOver}
-				<div class="shrink-0 self-center text-[10px] text-gray-400 dark:text-gray-500 pl-2">
-					{formatTimeAgo(createdAt)}
+				<div class="flex self-center flex-1 w-full min-w-0">
+					{#if unread}
+						<div class="shrink-0 self-center pr-2.5 flex transition-opacity duration-300">
+							<div class="size-1.5 bg-sky-500 rounded-full" />
+						</div>
+					{/if}
+					<div
+						dir="auto"
+						class="text-left self-center overflow-hidden w-full h-[20px] truncate {unread
+							? 'font-medium text-gray-900 dark:text-gray-100'
+							: ''}"
+					>
+						{title}
+					</div>
 				</div>
-			{/if}
-		</a>
+
+				<!-- Time ago indicator -->
+				{#if createdAt && !mouseOver}
+					<div class="shrink-0 self-center text-[10px] text-gray-400 dark:text-gray-500 pl-2">
+						{formatTimeAgo(createdAt)}
+					</div>
+				{/if}
+			</a>
+		</div>
 	{/if}
 
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -552,34 +660,6 @@
 						}}
 					>
 						<Sparkles strokeWidth="2" />
-					</button>
-				</Tooltip>
-			</div>
-		{:else if shiftKey && mouseOver}
-			<div class=" flex items-center self-center space-x-1.5">
-				<Tooltip content={$i18n.t('Archive')} className="flex items-center">
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={archiving}
-						on:click={() => {
-							archiveChatHandler(id);
-						}}
-						type="button"
-					>
-						<ArchiveBox className="size-4  translate-y-[0.5px]" strokeWidth="2" />
-					</button>
-				</Tooltip>
-
-				<Tooltip content={$i18n.t('Delete')}>
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={deleting}
-						on:click={() => {
-							deleteChatHandler(id);
-						}}
-						type="button"
-					>
-						<GarbageBin strokeWidth="2" />
 					</button>
 				</Tooltip>
 			</div>

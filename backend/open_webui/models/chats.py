@@ -724,6 +724,109 @@ class ChatTable:
         except Exception:
             return None
 
+    async def delete_chats_by_ids_and_user_id(
+        self, chat_ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Delete multiple chats by their IDs for a specific user."""
+        try:
+            async with get_async_db_context(db) as db:
+                # First, collect tags for orphan cleanup
+                stmt = select(Chat).filter(
+                    Chat.id.in_(chat_ids),
+                    Chat.user_id == user_id
+                )
+                result = await db.execute(stmt)
+                chats = result.scalars().all()
+
+                for chat in chats:
+                    await self.delete_orphan_tags_for_user(chat.meta.get('tags', []), user_id, threshold=1, db=db)
+
+                # Delete the chats
+                await db.execute(delete(Chat).filter(
+                    Chat.id.in_(chat_ids),
+                    Chat.user_id == user_id
+                ))
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def archive_chats_by_ids_and_user_id(
+        self, chat_ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Archive multiple chats by their IDs for a specific user."""
+        try:
+            async with get_async_db_context(db) as db:
+                # Get the chats to collect tags
+                stmt = select(Chat).filter(
+                    Chat.id.in_(chat_ids),
+                    Chat.user_id == user_id
+                )
+                result = await db.execute(stmt)
+                chats = result.scalars().all()
+
+                for chat in chats:
+                    await self.delete_orphan_tags_for_user(chat.meta.get('tags', []), user_id, db=db)
+
+                # Archive the chats
+                await db.execute(
+                    update(Chat)
+                    .filter(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(archived=True, folder_id=None, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def unarchive_chats_by_ids_and_user_id(
+        self, chat_ids: list[str], user_id: str, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Unarchive multiple chats by their IDs for a specific user."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .filter(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(archived=False, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def pin_chats_by_ids_and_user_id(
+        self, chat_ids: list[str], user_id: str, pinned: bool, db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Pin or unpin multiple chats by their IDs for a specific user."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .filter(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(pinned=pinned, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
+    async def move_chats_by_ids_and_user_id(
+        self, chat_ids: list[str], user_id: str, folder_id: Optional[str], db: Optional[AsyncSession] = None
+    ) -> bool:
+        """Move multiple chats to a folder (or unassign folder) by their IDs for a specific user."""
+        try:
+            async with get_async_db_context(db) as db:
+                await db.execute(
+                    update(Chat)
+                    .filter(Chat.id.in_(chat_ids), Chat.user_id == user_id)
+                    .values(folder_id=folder_id, updated_at=int(time.time()))
+                )
+                await db.commit()
+                return True
+        except Exception:
+            return False
+
     async def archive_all_chats_by_user_id(self, user_id: str, db: Optional[AsyncSession] = None) -> bool:
         try:
             async with get_async_db_context(db) as db:

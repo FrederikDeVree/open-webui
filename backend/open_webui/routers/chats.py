@@ -1314,6 +1314,108 @@ async def archive_chat_by_id(id: str, user=Depends(get_verified_user), db: Async
 
 
 ############################
+# Batch Operations
+############################
+
+
+class ChatBatchIdsRequest(BaseModel):
+    ids: list[str]
+
+
+class ChatBatchMoveRequest(BaseModel):
+    ids: list[str]
+    folder_id: Optional[str] = None
+
+
+@router.post('/batch/delete', response_model=bool)
+async def batch_delete_chats(
+    request: Request,
+    body: ChatBatchIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch delete multiple chats."""
+    if user.role == 'admin':
+        # Admin can delete any user's chats
+        results = []
+        for chat_id in body.ids:
+            chat = await Chats.get_chat_by_id(chat_id, db=db)
+            if chat:
+                await Chats.delete_orphan_tags_for_user(
+                    chat.meta.get('tags', []), chat.user_id, threshold=1, db=db
+                )
+                result = await Chats.delete_chat_by_id(chat_id, db=db)
+                results.append(result)
+        return all(results)
+    else:
+        if not await has_permission(
+            user.id, 'chat.delete', request.app.state.config.USER_PERMISSIONS
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+            )
+
+        # Delete only the user's own chats
+        success = await Chats.delete_chats_by_ids_and_user_id(body.ids, user.id, db=db)
+        return success
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    body: ChatBatchIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch archive multiple chats."""
+    # Archive only the user's own chats
+    success = await Chats.archive_chats_by_ids_and_user_id(body.ids, user.id, db=db)
+    return success
+
+
+@router.post('/batch/unarchive', response_model=bool)
+async def batch_unarchive_chats(
+    body: ChatBatchIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch unarchive multiple chats."""
+    # Unarchive only the user's own chats
+    success = await Chats.unarchive_chats_by_ids_and_user_id(body.ids, user.id, db=db)
+    return success
+
+
+@router.post('/batch/pin', response_model=bool)
+async def batch_pin_chats(
+    body: ChatBatchIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch pin/unpin multiple chats."""
+    # Get current pinned status of first chat (toggle logic)
+    first_chat = await Chats.get_chat_by_id_and_user_id(body.ids[0], user.id, db=db) if body.ids else None
+    pinned = False if first_chat else True  # default to pin
+    if first_chat:
+        pinned = first_chat.pinned is not True  # toggle
+
+    success = await Chats.pin_chats_by_ids_and_user_id(body.ids, user.id, pinned, db=db)
+    return success
+
+
+@router.post('/batch/move', response_model=bool)
+async def batch_move_chats(
+    body: ChatBatchMoveRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch move multiple chats to a folder."""
+    success = await Chats.move_chats_by_ids_and_user_id(
+        body.ids, user.id, body.folder_id, db=db
+    )
+    return success
+
+
+############################
 # ShareChatById
 ############################
 

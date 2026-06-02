@@ -29,7 +29,8 @@
 		selectedFolder,
 		WEBUI_NAME,
 		sidebarWidth,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -44,7 +45,12 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		batchDeleteChats,
+		batchArchiveChats,
+		batchPinChats,
+		batchMoveChats,
+		batchUnarchiveChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -71,6 +77,10 @@
 	import Sidebar from '../icons/Sidebar.svelte';
 	import PinnedModelList from './Sidebar/PinnedModelList.svelte';
 	import Note from '../icons/Note.svelte';
+	import Pin from '../icons/Pin.svelte';
+	import ArchiveBox from '../icons/ArchiveBox.svelte';
+	import GarbageBin from '../icons/GarbageBin.svelte';
+	import XMark from '../icons/XMark.svelte';
 	import Code from '../icons/Code.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
@@ -85,6 +95,11 @@
 
 	let selectedChatId = null;
 	let showCreateChannel = false;
+
+	// Batch action state
+	$: showBatchActionBar = $selectedChatIds.size > 0;
+	let showFolderPicker = false;
+	let batchActionLoading = false;
 
 	// Pagination variables
 	let chatListLoading = false;
@@ -359,6 +374,104 @@
 		}
 
 		initChatList();
+	};
+
+	// Batch action handlers
+	const clearSelection = () => {
+		$selectedChatIds.clear();
+	};
+
+	const handleBatchDelete = async () => {
+		if (batchActionLoading) return;
+		batchActionLoading = true;
+
+		const ids = Array.from($selectedChatIds);
+		try {
+			await batchDeleteChats(localStorage.token, ids);
+			toast.success($i18n.t('Chats deleted.'));
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+		clearSelection();
+		batchActionLoading = false;
+		initChatList();
+	};
+
+	const handleBatchArchive = async () => {
+		if (batchActionLoading) return;
+		batchActionLoading = true;
+
+		const ids = Array.from($selectedChatIds);
+		try {
+			await batchArchiveChats(localStorage.token, ids);
+			toast.success($i18n.t('Chats archived.'));
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+		clearSelection();
+		batchActionLoading = false;
+		initChatList();
+	};
+
+	const handleBatchUnarchive = async () => {
+		if (batchActionLoading) return;
+		batchActionLoading = true;
+
+		const ids = Array.from($selectedChatIds);
+		try {
+			await batchUnarchiveChats(localStorage.token, ids);
+			toast.success($i18n.t('Chats unarchived.'));
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+		clearSelection();
+		batchActionLoading = false;
+		initChatList();
+	};
+
+	const handleBatchPin = async () => {
+		if (batchActionLoading) return;
+		batchActionLoading = true;
+
+		const ids = Array.from($selectedChatIds);
+		try {
+			await batchPinChats(localStorage.token, ids);
+			toast.success($i18n.t('Chats pinned.'));
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+		clearSelection();
+		batchActionLoading = false;
+		initChatList();
+	};
+
+	const handleBatchMove = async (folderId: string | null) => {
+		if (batchActionLoading) return;
+		batchActionLoading = true;
+
+		const ids = Array.from($selectedChatIds);
+		try {
+			await batchMoveChats(localStorage.token, ids, folderId);
+			toast.success($i18n.t('Chats moved.'));
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+		clearSelection();
+		batchActionLoading = false;
+		initChatList();
+		showFolderPicker = false;
+	};
+
+	const selectAllChats = () => {
+		const allIds = [
+			...($pinnedChats ?? []).map((c) => c.id),
+			...($chats ?? []).map((c) => c.id)
+		];
+		$selectedChatIds.update(() => new Set(allIds));
+	};
+
+	const deselectAllChats = () => {
+		$selectedChatIds.update(() => new Set());
 	};
 
 	const inputFilesHandler = async (files) => {
@@ -1501,6 +1614,121 @@
 								</Folder>
 							</div>
 						</div>
+					{/if}
+
+					<!-- Batch action bar -->
+					{#if $selectedChatIds.size > 0}
+						<div class="bg-sky-500/10 dark:bg-sky-400/10 border border-sky-500/30 dark:border-sky-400/30 rounded-xl mx-1 mb-2 p-2">
+							<div class="flex items-center justify-between gap-2">
+								<div class="flex items-center gap-2 min-w-0 flex-1">
+									<span class="text-xs font-medium text-sky-700 dark:text-sky-300 truncate">
+										{$i18n.t('{{COUNT}} selected', { COUNT: $selectedChatIds.size })}
+									</span>
+								</div>
+								<div class="flex items-center gap-1 shrink-0">
+									<Tooltip content={$i18n.t('Select All')} placement="top">
+										<button
+											class="p-1.5 rounded-lg hover:bg-sky-500/20 transition text-sky-600 dark:text-sky-400"
+											on:click={selectAllChats}
+											type="button"
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-4">
+												<path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h11a3 3 0 003-3v-9a3 3 0 00-3-3h-11zm0 1.5h11a1.5 1.5 0 011.5 1.5v1a.75.75 0 01-.75.75H6.75A.75.75 0 016 8.5v-1A1.5 1.5 0 017.5 6h6.75V4.5H7.5a1.5 1.5 0 00-1.5 1.5v1z"/>
+											</svg>
+										</button>
+									</Tooltip>
+									<Tooltip content={$i18n.t('Deselect All')} placement="top">
+										<button
+											class="p-1.5 rounded-lg hover:bg-sky-500/20 transition text-sky-600 dark:text-sky-400"
+											on:click={deselectAllChats}
+											type="button"
+										>
+											<XMark className="size-4" strokeWidth="2" />
+										</button>
+									</Tooltip>
+									<Tooltip content={$i18n.t('Move to folder')} placement="top">
+										<button
+											class="p-1.5 rounded-lg hover:bg-sky-500/20 transition text-sky-600 dark:text-sky-400"
+											on:click={() => { showFolderPicker = true; }}
+											disabled={batchActionLoading}
+											type="button"
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+											</svg>
+										</button>
+									</Tooltip>
+									<Tooltip content={$i18n.t('Pin')} placement="top">
+										<button
+											class="p-1.5 rounded-lg hover:bg-sky-500/20 transition text-sky-600 dark:text-sky-400"
+											on:click={handleBatchPin}
+											disabled={batchActionLoading}
+											type="button"
+										>
+											<Pin className="size-4" strokeWidth="2" />
+										</button>
+									</Tooltip>
+									<Tooltip content={$i18n.t('Archive')} placement="top">
+										<button
+											class="p-1.5 rounded-lg hover:bg-sky-500/20 transition text-sky-600 dark:text-sky-400"
+											on:click={handleBatchArchive}
+											disabled={batchActionLoading}
+											type="button"
+										>
+											<ArchiveBox className="size-4" strokeWidth="2" />
+										</button>
+									</Tooltip>
+									<Tooltip content={$i18n.t('Delete')} placement="top">
+										<button
+											class="p-1.5 rounded-lg hover:bg-red-500/20 transition text-red-600 dark:text-red-400"
+											on:click={handleBatchDelete}
+											disabled={batchActionLoading}
+											type="button"
+										>
+											<GarbageBin className="size-4" strokeWidth="2" />
+										</button>
+									</Tooltip>
+								</div>
+							</div>
+						</div>
+
+						<!-- Folder picker modal -->
+						{#if showFolderPicker}
+							<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" on:click={(e) => { if (e.target === e.currentTarget) showFolderPicker = false; }}>
+								<div class="bg-white dark:bg-gray-900 rounded-xl p-4 w-80 shadow-xl border border-gray-200 dark:border-gray-800">
+									<h3 class="text-sm font-medium mb-3">{$i18n.t('Move to folder')}</h3>
+									<div class="mb-3">
+										<!-- Clear folder (move out of folders) -->
+										<button
+											class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-sm"
+											on:click={() => handleBatchMove(null)}
+										>
+											{$i18n.t('Clear folder')}
+										</button>
+									</div>
+									<div class="mb-3 max-h-48 overflow-y-auto">
+										{#if $_folders.length > 0}
+											{#each $_folders as folder (folder.id)}
+												<button
+													class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-sm truncate"
+													on:click={() => handleBatchMove(folder.id)}
+												>
+													{folder.name}
+												</button>
+											{/each}
+										{:else}
+											<div class="text-sm text-gray-500">{$i18n.t('No folders')}</div>
+										{/if}
+									</div>
+									<button
+										class="w-full px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition text-sm"
+										on:click={() => showFolderPicker = false}
+									>
+										{$i18n.t('Cancel')}
+									</button>
+								</div>
+							</div>
+						{/if}
 					{/if}
 
 					<div class=" flex-1 flex flex-col overflow-y-auto scrollbar-hidden">
