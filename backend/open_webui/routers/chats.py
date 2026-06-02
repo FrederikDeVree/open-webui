@@ -1581,6 +1581,141 @@ async def delete_all_tags_by_id(
         await Chats.delete_all_tags_by_id_and_user_id(id, user.id, db=db)
         await Chats.delete_orphan_tags_for_user(old_tags, user.id, db=db)
 
-        return True
+
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)
+
+
+############################
+# Batch Chat Operations
+# Delete, Archive, Pin, Toggle-Pin, Move multiple chats at once
+# via form { chat_ids: [...], folder_id?: ... }
+# via POST /batch/{action}
+############################
+
+
+class BatchChatIdsForm(BaseModel):
+    chat_ids: list[str]
+    folder_id: Optional[str] = None
+
+
+@router.post('/batch/delete', response_model=bool)
+async def batch_delete_chats(
+    request: Request,
+    form_data: BatchChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch delete chats for the current user."""
+    try:
+        success_count = 0
+        for chat_id in form_data.chat_ids:
+            if user.role == 'admin':
+                chat = await Chats.get_chat_by_id(chat_id, db=db)
+                if chat:
+                    await Chats.delete_orphan_tags_for_user(chat.meta.get('tags', []), user.id, threshold=1, db=db)
+                    result = await Chats.delete_chat_by_id(chat_id, db=db)
+                    if result:
+                        success_count += 1
+            else:
+                if not await has_permission(user.id, 'chat.delete', request.app.state.config.USER_PERMISSIONS):
+                    continue
+                chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id, db=db)
+                if chat:
+                    await Chats.delete_orphan_tags_for_user(chat.meta.get('tags', []), user.id, threshold=1, db=db)
+                    result = await Chats.delete_chat_by_id_and_user_id(chat_id, user.id, db=db)
+                    if result:
+                        success_count += 1
+        return success_count > 0
+    except Exception as e:
+        log.error(f"Batch delete failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    form_data: BatchChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch archive chats for the current user."""
+    try:
+        success_count = 0
+        for chat_id in form_data.chat_ids:
+            chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id, db=db)
+            if chat:
+                chat = await Chats.toggle_chat_archive_by_id(chat_id, db=db)
+                tag_ids = chat.meta.get('tags', [])
+                if chat.archived:
+                    await Chats.delete_orphan_tags_for_user(tag_ids, user.id, db=db)
+                else:
+                    await Tags.ensure_tags_exist(tag_ids, user.id, db=db)
+                success_count += 1
+        return success_count > 0
+    except Exception as e:
+        log.error(f"Batch archive failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post('/batch/pin', response_model=bool)
+async def batch_pin_chats(
+    form_data: BatchChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch pin chats for the current user."""
+    try:
+        success_count = 0
+        for chat_id in form_data.chat_ids:
+            chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id, db=db)
+            if chat:
+                if not chat.pinned:
+                    chat = await Chats.toggle_chat_pinned_by_id(chat_id, db=db)
+                    success_count += 1
+        return success_count > 0
+    except Exception as e:
+        log.error(f"Batch pin failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post('/batch/toggle-pin', response_model=bool)
+async def batch_toggle_pin_chats(
+    form_data: BatchChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch toggle-pin chats for the current user."""
+    try:
+        success_count = 0
+        for chat_id in form_data.chat_ids:
+            chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id, db=db)
+            if chat:
+                chat = await Chats.toggle_chat_pinned_by_id(chat_id, db=db)
+                success_count += 1
+        return success_count > 0
+    except Exception as e:
+        log.error(f"Batch toggle-pin failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post('/batch/move', response_model=bool)
+async def batch_move_chats(
+    form_data: BatchChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Batch move chats to a folder for the current user."""
+    try:
+        success_count = 0
+        for chat_id in form_data.chat_ids:
+            chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id, db=db)
+            if chat:
+                chat = await Chats.update_chat_folder_id_by_id_and_user_id(
+                    chat_id, user.id, form_data.folder_id, db=db
+                )
+                if chat:
+                    success_count += 1
+        return success_count > 0
+    except Exception as e:
+        log.error(f"Batch move failed: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

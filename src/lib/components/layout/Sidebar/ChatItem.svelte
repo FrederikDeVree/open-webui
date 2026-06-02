@@ -35,7 +35,8 @@
 		currentChatPage,
 		tags,
 		selectedFolder,
-		activeChatIds
+		activeChatIds,
+		chatSelection
 	} from '$lib/stores';
 
 	import ChatMenu from './ChatMenu.svelte';
@@ -61,7 +62,7 @@
 	export let lastReadAt: number | null = null;
 
 	export let selected = false;
-	export let shiftKey = false;
+	export let selectionMode = false;
 
 	export let onDragEnd = () => {};
 
@@ -237,9 +238,9 @@
 
 	let ignoreBlur = false;
 	let doubleClicked = false;
-
 	let dragged = false;
 	let x = 0;
+	let draggable = true;
 	let y = 0;
 
 	const onDragStart = (event) => {
@@ -454,25 +455,27 @@
 					? 'bg-gray-100 dark:bg-gray-950 selected'
 					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
 			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
-
-				if ($selectedFolder) {
-					selectedFolder.set(null);
+			on:click={(e) => {
+				if (selectionMode) {
+					e.preventDefault();
+					e.stopImmediatePropagation();
+					dispatch('toggleSelection', id);
+				} else {
+					dispatch('select');
+					if ($selectedFolder) {
+						selectedFolder.set(null);
+					}
+					if ($mobile) {
+						showSidebar.set(false);
+					}
+					// Optimistically mark as read in UI when clicked
+					unread = false;
+					lastReadAt = Date.now() / 1000;
 				}
-
-				if ($mobile) {
-					showSidebar.set(false);
-				}
-
-				// Optimistically mark as read in UI when clicked
-				unread = false;
-				lastReadAt = Date.now() / 1000;
 			}}
 			on:dblclick={async (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-
 				doubleClicked = true;
 				renameHandler();
 			}}
@@ -485,19 +488,47 @@
 			on:focus={(e) => {}}
 			draggable="false"
 		>
-			<!-- Loading spinner for active chat (left side) -->
-			{#if $activeChatIds.has(id)}
-				<div class="shrink-0 self-center pr-2">
-					<Spinner className="size-3" />
-				</div>
-			{/if}
-
-			<div class="flex self-center flex-1 w-full min-w-0">
+			{#if selectionMode}
+				<!-- Checkbox for selection mode -->
+				<button
+					class="shrink-0 self-center mr-2 p-0 transition rounded hover:bg-gray-200 dark:hover:bg-gray-800"
+					on:click={(e) => {
+						e.preventDefault();
+						e.stopImmediatePropagation();
+						dispatch('toggleSelection', id);
+					}}
+					aria-label={$i18n.t('Select chat')}
+				>
+					{#if $chatSelection.ids.has(id)}
+						<Check className="size-4 text-gray-900 dark:text-white" strokeWidth="2" />
+					{:else}
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 16 16"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="1.5"
+							class="size-4 text-gray-400"
+						>
+							<rect x="2" y="2" width="12" height="12" rx="2" />
+						</svg>
+					{/if}
+				</button>
+			{:else}
+				<!-- Loading spinner for active chat (left side) -->
+				{#if $activeChatIds.has(id)}
+					<div class="shrink-0 self-center pr-2">
+						<Spinner className="size-3" />
+					</div>
+				{/if}
+				<!-- Unread dot -->
 				{#if unread}
 					<div class="shrink-0 self-center pr-2.5 flex transition-opacity duration-300">
 						<div class="size-1.5 bg-sky-500 rounded-full" />
 					</div>
 				{/if}
+			{/if}
+			<div class="flex self-center flex-1 w-full min-w-0">
 				<div
 					dir="auto"
 					class="text-left self-center overflow-hidden w-full h-[20px] truncate {unread
@@ -507,9 +538,8 @@
 					{title}
 				</div>
 			</div>
-
 			<!-- Time ago indicator -->
-			{#if createdAt && !mouseOver}
+			{#if createdAt && !mouseOver && !selectionMode}
 				<div class="shrink-0 self-center text-[10px] text-gray-400 dark:text-gray-500 pl-2">
 					{formatTimeAgo(createdAt)}
 				</div>
@@ -555,35 +585,7 @@
 					</button>
 				</Tooltip>
 			</div>
-		{:else if shiftKey && mouseOver}
-			<div class=" flex items-center self-center space-x-1.5">
-				<Tooltip content={$i18n.t('Archive')} className="flex items-center">
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={archiving}
-						on:click={() => {
-							archiveChatHandler(id);
-						}}
-						type="button"
-					>
-						<ArchiveBox className="size-4  translate-y-[0.5px]" strokeWidth="2" />
-					</button>
-				</Tooltip>
-
-				<Tooltip content={$i18n.t('Delete')}>
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={deleting}
-						on:click={() => {
-							deleteChatHandler(id);
-						}}
-						type="button"
-					>
-						<GarbageBin strokeWidth="2" />
-					</button>
-				</Tooltip>
-			</div>
-		{:else}
+	{:else}
 			<div class="flex self-center z-10 items-end">
 				<ChatMenu
 					chatId={id}

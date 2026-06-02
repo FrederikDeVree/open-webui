@@ -29,7 +29,8 @@
 		selectedFolder,
 		WEBUI_NAME,
 		sidebarWidth,
-		activeChatIds
+		activeChatIds,
+		chatSelection
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -44,7 +45,12 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		deleteChatsByIds,
+		archiveChatsByIds,
+		pinChatsByIds,
+		togglePinChatsByIds,
+		moveChatsToFolderByIds
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -454,14 +460,20 @@
 		if (e.key === 'Shift') {
 			shiftKey = true;
 		}
+		if ($chatSelection.mode) {
+			if (e.key === 'Escape') {
+				clearSelection();
+			} else if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
+				e.preventDefault();
+				selectAllChats();
+			}
+		}
 	};
-
 	const onKeyUp = (e) => {
 		if (e.key === 'Shift') {
 			shiftKey = false;
 		}
 	};
-
 	const onFocus = () => {};
 
 	const onBlur = () => {
@@ -469,6 +481,131 @@
 		selectedChatId = null;
 	};
 
+	// Selection mode helpers
+	const toggleSelectionMode = () => {
+		$chatSelection.mode = !$chatSelection.mode;
+		if (!$chatSelection.mode) {
+			// Clear selection when exiting mode
+			$chatSelection.ids = new Set();
+			$chatSelection.lastId = null;
+		}
+	};
+
+	const selectChat = (id: string) => {
+		$chatSelection.ids.add(id);
+		$chatSelection.lastId = id;
+	};
+
+	const deselectChat = (id: string) => {
+		$chatSelection.ids.delete(id);
+	};
+
+	const handleChatClick = (id: string) => {
+		if ($chatSelection.mode) {
+			if ($chatSelection.lastId !== null) {
+				// Range select between lastId and current id
+				rangeSelect($chatSelection.lastId, id);
+			} else {
+				selectChat(id);
+			}
+		}
+	};
+
+	const rangeSelect = (fromId: string, toId: string) => {
+		const allChatIds = getAllChatIds();
+		const fromIdx = allChatIds.indexOf(fromId);
+		const toIdx = allChatIds.indexOf(toId);
+
+		if (fromIdx === -1 || toIdx === -1) return;
+
+		const start = Math.min(fromIdx, toIdx);
+		const end = Math.max(fromIdx, toIdx);
+
+		for (let i = start; i <= end; i++) {
+			$chatSelection.ids.add(allChatIds[i]);
+		}
+		$chatSelection.lastId = toId;
+	};
+
+	const getAllChatIds = (): string[] => {
+		const ids: string[] = [];
+		// Pinned chats
+		($pinnedChats ?? []).forEach((chat: any) => {
+			if (chat.id) ids.push(chat.id);
+		});
+		// Regular chats
+		($chats ?? []).forEach((chat: any) => {
+			if (chat.id) ids.push(chat.id);
+		});
+		return ids;
+	};
+
+	const selectAllChats = () => {
+		getAllChatIds().forEach((id) => $chatSelection.ids.add(id));
+	};
+
+	const clearSelection = () => {
+		$chatSelection.mode = false;
+		$chatSelection.ids = new Set();
+		$chatSelection.lastId = null;
+	};
+
+	const executeBatchAction = async (action: string) => {
+		const selectedIds = Array.from($chatSelection.ids);
+		if (selectedIds.length === 0) return;
+
+		const count = selectedIds.length;
+
+		try {
+			if (action === 'delete') {
+				await deleteChatsByIds(localStorage.token, selectedIds);
+				toast.success($i18n.t('{{COUNT}} chats deleted', { COUNT: count }));
+			} else if (action === 'archive') {
+				await archiveChatsByIds(localStorage.token, selectedIds);
+				toast.success($i18n.t('{{COUNT}} chats archived', { COUNT: count }));
+			} else if (action === 'pin') {
+				await pinChatsByIds(localStorage.token, selectedIds);
+				toast.success($i18n.t('{{COUNT}} chats pinned', { COUNT: count }));
+			} else if (action === 'toggle-pin') {
+				await togglePinChatsByIds(localStorage.token, selectedIds);
+			} else if (action === 'move') {
+				await showMoveToFolder(selectedIds);
+				// showMoveToFolder will call initChatList on success
+				return;
+			}
+
+			await initChatList();
+			clearSelection();
+		} catch (error) {
+			console.error(`Batch ${action} failed:`, error);
+			toast.error($i18n.t('Failed to perform batch operation'));
+		}
+	};
+
+	let showMoveModal = false;
+	let moveChatIds: string[] = [];
+
+	const showMoveToFolder = async (ids: string[]) => {
+		moveChatIds = ids;
+		showMoveModal = true;
+	};
+
+	const handleMoveToFolder = async (folderId: string | null) => {
+		const selectedIds = moveChatIds;
+		const count = selectedIds.length;
+
+		if (selectedIds.length > 0) {
+			try {
+				await moveChatsToFolderByIds(localStorage.token, selectedIds, folderId);
+				toast.success($i18n.t('{{COUNT}} chats moved', { COUNT: count }));
+				await initChatList();
+				clearSelection();
+			} catch (error) {
+				console.error('Batch move failed:', error);
+				toast.error($i18n.t('Failed to move chats'));
+			}
+		}
+	};
 	const MIN_WIDTH = 220;
 	const MAX_WIDTH = 480;
 
@@ -1043,14 +1180,91 @@
 						</div>
 					</button>
 				</Tooltip>
-
-				<div
-					class="{scrollTop > 0
-						? 'visible'
-						: 'invisible'} sidebar-bg-gradient-to-b bg-linear-to-b from-gray-50 dark:from-gray-950 to-transparent from-50% pointer-events-none absolute inset-0 -z-10 -mb-6"
-				></div>
+				{#if $chatSelection.mode}
+					<!-- Selection toolbar -->
+					<div class="sidebar px-[0.5625rem] py-1.5 flex justify-between items-center space-x-1">
+						<div class="flex items-center space-x-1.5">
+							<button
+								class="text-xs px-2 py-1 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+								on:click={() => {
+									selectAllChats();
+								}}
+							>
+								{$i18n.t('Select All')}
+							</button>
+							<span class="text-xs text-gray-500 dark:text-gray-400">
+								{$i18n.t('{{COUNT}} chats selected', { COUNT: $chatSelection.ids.size })}
+							</span>
+						</div>
+						<div class="flex items-center space-x-1">
+							<Tooltip content={$i18n.t('Delete')} placement="top">
+								<button
+									class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 dark:text-gray-400 hover:text-red-500 transition"
+									on:click={() => {
+										executeBatchAction('delete');
+									}}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5">
+										<path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+										<path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5.5l1-1h3l1 1H13a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+									</svg>
+								</button>
+							</Tooltip>
+							<Tooltip content={$i18n.t('Archive')} placement="top">
+								<button
+									class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition"
+									on:click={() => {
+										executeBatchAction('archive');
+									}}
+								>
+									<ArchiveBox className="w-3.5 h-3.5" />
+								</button>
+							</Tooltip>
+							<Tooltip content={$i18n.t('Pin')} placement="top">
+								<button
+									class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition"
+									on:click={() => {
+										executeBatchAction('pin');
+									}}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5">
+										<path d="M4.5 1a.5.5 0 0 0-1 0v1H2a2 2 0 0 0-2 2v1.5A2.5 2.5 0 0 0 1.5 8v5.5a.5.5 0 0 0 1 0V8h1v4.5a.5.5 0 0 0 1 0V8h1v4.5a.5.5 0 0 0 1 0V8h1v4.5a.5.5 0 0 0 1 0V8h1v-1a.5.5 0 0 0-1 0V7H6.5a2.5 2.5 0 0 1-2.5-2.5V4h1a.5.5 0 0 0 0-1h-1V1a.5.5 0 0 0-.5-.5zm1 1H4v1h1.5V2zm3 0H7v1h1.5V2zm3 0H10v1h1.5V2z"/>
+									</svg>
+								</button>
+							</Tooltip>
+							<Tooltip content={$i18n.t('Move to...')} placement="top">
+								<button
+									class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition"
+									on:click={() => {
+										executeBatchAction('move');
+									}}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5">
+										<path fill-rule="evenodd" d="M2 4.867a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1h-10a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1h-10a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5z"/>
+										<path fill-rule="evenodd" d="M11 14.5a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-1 0v1.293l-3.754-3.754a.5.5 0 1 0-.708.708L10.293 11H9a.5.5 0 0 0 0 1h2.5a.5.5 0 0 0 .5-.5V9.293l-3.754 3.754a.5.5 0 1 0 .708.708L11 11.293V14a.5.5 0 0 0 .5.5z"/>
+									</svg>
+								</button>
+							</Tooltip>
+							<Tooltip content={$i18n.t('Cancel')} placement="top">
+								<button
+									class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition"
+									on:click={() => {
+										clearSelection();
+									}}
+								>
+									<XMark className="w-3.5 h-3.5" />
+								</button>
+							</Tooltip>
+						</div>
+					</div>
+				{:else}
+					<div
+						class="{scrollTop > 0
+							? 'visible'
+							: 'invisible'} sidebar-bg-gradient-to-b bg-linear-to-b from-gray-50 dark:from-gray-950 to-transparent from-50% pointer-events-none absolute inset-0 -z-10 -mb-6"
+					></div>
+				{/if}
 			</div>
-
 			<div
 				class="relative flex flex-col flex-1 overflow-y-auto scrollbar-hidden pt-3 pb-3"
 				on:scroll={(e) => {
@@ -1480,13 +1694,26 @@
 												createdAt={chat.created_at}
 												updatedAt={chat.updated_at}
 												lastReadAt={chat.last_read_at}
-												{shiftKey}
-												selected={selectedChatId === chat.id}
+												selectionMode={$chatSelection.mode}
+												selected={$chatSelection.ids.has(chat.id)}
 												on:select={() => {
 													selectedChatId = chat.id;
 												}}
 												on:unselect={() => {
 													selectedChatId = null;
+												}}
+												on:toggleSelection={() => {
+													if ($chatSelection.mode) {
+														if ($chatSelection.ids.has(chat.id)) {
+															$chatSelection.ids.delete(chat.id);
+														} else {
+															if ($chatSelection.lastId) {
+																rangeSelect($chatSelection.lastId, chat.id);
+															} else {
+																selectChat(chat.id);
+															}
+														}
+													}
 												}}
 												on:change={async () => {
 													initChatList();
@@ -1543,13 +1770,26 @@
 										createdAt={chat.created_at}
 										updatedAt={chat.updated_at}
 										lastReadAt={chat.last_read_at}
-										{shiftKey}
-										selected={selectedChatId === chat.id}
+										selectionMode={$chatSelection.mode}
+										selected={$chatSelection.ids.has(chat.id)}
 										on:select={() => {
 											selectedChatId = chat.id;
 										}}
 										on:unselect={() => {
 											selectedChatId = null;
+										}}
+										on:toggleSelection={() => {
+											if ($chatSelection.mode) {
+												if ($chatSelection.ids.has(chat.id)) {
+													$chatSelection.ids.delete(chat.id);
+												} else {
+													if ($chatSelection.lastId) {
+														rangeSelect($chatSelection.lastId, chat.id);
+													} else {
+														selectChat(chat.id);
+													}
+												}
+											}
 										}}
 										on:change={async () => {
 											initChatList();
@@ -1559,7 +1799,6 @@
 											tagEventHandler(type, name, chat.id);
 										}}
 									/>
-								{/each}
 
 								{#if $scrollPaginationEnabled && !allChatsLoaded}
 									<Loader
@@ -1577,17 +1816,17 @@
 										</div>
 									</Loader>
 								{/if}
-							{:else}
-								<div
-									class="w-full flex justify-center py-1 text-xs animate-pulse items-center gap-2"
-								>
-									<Spinner className=" size-4" />
-									<div class=" ">{$i18n.t('Loading...')}</div>
-								</div>
-							{/if}
+							{/each}
 						</div>
 					</div>
-				</Folder>
+				{:else}
+					<div
+						class="w-full flex justify-center py-1 text-xs animate-pulse items-center gap-2"
+					>
+						<Spinner className=" size-4" />
+						<div class=" ">{$i18n.t('Loading...')}</div>
+					</div>
+				{/if}
 			</div>
 
 			<div class="px-1.5 pt-1.5 pb-2 sticky bottom-0 z-10 -mt-3 sidebar">

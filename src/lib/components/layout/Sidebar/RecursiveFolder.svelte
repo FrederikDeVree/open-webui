@@ -11,7 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 
-	import { chatId, mobile, selectedFolder, showSidebar } from '$lib/stores';
+	import { chatId, mobile, selectedFolder, showSidebar, chatSelection } from '$lib/stores';
 
 	import {
 		deleteFolderById,
@@ -684,7 +684,17 @@
 							createdAt={chat.created_at}
 							updatedAt={chat.updated_at}
 							lastReadAt={chat.last_read_at}
-							{shiftKey}
+							selectionMode={$chatSelection.mode}
+							selected={$chatSelection.ids.has(chat.id)}
+							on:toggleSelection={(e) => {
+								const id = e.detail;
+								if ($chatSelection.ids.has(id)) {
+									$chatSelection.ids.delete(id);
+								} else {
+									$chatSelection.ids.add(id);
+									$chatSelection.lastId = id;
+								}
+							}}
 							on:change={(e) => {
 								dispatch('change', e.detail);
 							}}

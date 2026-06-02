@@ -60,6 +60,7 @@ export const channelId = writable(null);
 
 export const chats = writable(null);
 export const pinnedChats = writable([]);
+export const chatSelection = writable({ mode: false, ids: new Set<string>(), lastId: null });
 export const pinnedNotes = writable([]);
 export const tags = writable([]);
 export const folders = writable([]);
