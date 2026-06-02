@@ -56,6 +56,7 @@
 	import ArchivedChatsModal from './ArchivedChatsModal.svelte';
 	import UserMenu from './Sidebar/UserMenu.svelte';
 	import ChatItem from './Sidebar/ChatItem.svelte';
+	import BatchActionBar from './Sidebar/BatchActionBar.svelte';
 	import Spinner from '../common/Spinner.svelte';
 	import Loader from '../common/Loader.svelte';
 	import Folder from '../common/Folder.svelte';
@@ -84,6 +85,86 @@
 	let shiftKey = false;
 
 	let selectedChatId = null;
+
+	// Multi-select state
+	let selectedChatIds = new Set<string>();
+	let lastSelectedChatId: string | null = null;
+
+	const handleChatSelect = (chatId: string, shift: boolean) => {
+		if (shift && lastSelectedChatId !== null) {
+			return;
+		}
+		if (selectedChatIds.has(chatId)) {
+			selectedChatIds.delete(chatId);
+		} else {
+			selectedChatIds = new Set([...selectedChatIds, chatId]);
+		}
+		lastSelectedChatId = chatId;
+	};
+
+	const handleChatSelectRange = (
+		chatId: string,
+		chatIdx: number,
+		listType: 'pinned' | 'regular',
+		shift: boolean
+	) => {
+		// If shift is false (checkbox click), just toggle this single chat
+		if (!shift) {
+			handleChatSelect(chatId, false);
+			return;
+		}
+
+		// Range selection: shift+click
+		if (lastSelectedChatId === null) {
+			handleChatSelect(chatId, false);
+			return;
+		}
+
+		// Build combined list and find indices
+		const pinned = $pinnedChats ?? [];
+		const regular = $chats ?? [];
+
+		// Find the absolute index of lastSelectedChatId
+		let lastIdx = -1;
+		for (let i = 0; i < pinned.length; i++) {
+			if (pinned[i].id === lastSelectedChatId) {
+				lastIdx = i;
+				break;
+			}
+		}
+		if (lastIdx === -1) {
+			for (let i = 0; i < regular.length; i++) {
+				if (regular[i].id === lastSelectedChatId) {
+					lastIdx = pinned.length + i;
+					break;
+				}
+			}
+		}
+		if (lastIdx === -1) {
+			handleChatSelect(chatId, false);
+			return;
+		}
+
+		// Compute absolute index of clicked chat
+		const absIdx = listType === 'pinned' ? chatIdx : pinned.length + chatIdx;
+		const rangeStart = Math.min(lastIdx, absIdx);
+		const rangeEnd = Math.max(lastIdx, absIdx);
+
+		// Build combined list for range iteration
+		const allChats = [...pinned, ...regular];
+		const newSet = new Set(selectedChatIds);
+		for (let i = rangeStart; i <= rangeEnd; i++) {
+			if (allChats[i]) newSet.add(allChats[i].id);
+		}
+		selectedChatIds = newSet;
+		lastSelectedChatId = chatId;
+	};
+
+	const clearSelection = () => {
+		selectedChatIds = new Set();
+		lastSelectedChatId = null;
+	};
+
 	let showCreateChannel = false;
 
 	// Pagination variables
@@ -454,6 +535,9 @@
 		if (e.key === 'Shift') {
 			shiftKey = true;
 		}
+		if (e.key === 'Escape' && selectedChatIds.size > 0) {
+			clearSelection();
+		}
 	};
 
 	const onKeyUp = (e) => {
@@ -467,6 +551,8 @@
 	const onBlur = () => {
 		shiftKey = false;
 		selectedChatId = null;
+		selectedChatIds = new Set();
+		lastSelectedChatId = null;
 	};
 
 	const MIN_WIDTH = 220;
@@ -647,6 +733,8 @@
 
 	const newChatHandler = async () => {
 		selectedChatId = null;
+		selectedChatIds = new Set();
+		lastSelectedChatId = null;
 		selectedFolder.set(null);
 
 		if ($user?.role !== 'admin' && $user?.permissions?.chat?.temporary_enforced) {
@@ -664,6 +752,8 @@
 
 	const itemClickHandler = async () => {
 		selectedChatId = null;
+		selectedChatIds = new Set();
+		lastSelectedChatId = null;
 		chatId.set('');
 
 		if ($mobile) {
@@ -1481,20 +1571,25 @@
 												updatedAt={chat.updated_at}
 												lastReadAt={chat.last_read_at}
 												{shiftKey}
-												selected={selectedChatId === chat.id}
-												on:select={() => {
-													selectedChatId = chat.id;
+												selected={selectedChatIds.has(chat.id)}
+												on:select={(e) => {
+													const shift = e.detail?.shift ?? shiftKey;
+													handleChatSelectRange(chat.id, idx, 'pinned', shift);
 												}}
 												on:unselect={() => {
-													selectedChatId = null;
+													selectedChatIds.delete(chat.id);
+													if (lastSelectedChatId === chat.id) {
+														lastSelectedChatId = null;
+													}
 												}}
-												on:change={async () => {
-													initChatList();
-												}}
-												on:tag={(e) => {
-													const { type, name } = e.detail;
-													tagEventHandler(type, name, chat.id);
-												}}
+											/>
+											on:change={async () => {
+												initChatList();
+											}}
+											on:tag={(e) => {
+												const { type, name } = e.detail;
+												tagEventHandler(type, name, chat.id);
+											}}
 											/>
 										{/each}
 									</div>
@@ -1544,12 +1639,16 @@
 										updatedAt={chat.updated_at}
 										lastReadAt={chat.last_read_at}
 										{shiftKey}
-										selected={selectedChatId === chat.id}
-										on:select={() => {
-											selectedChatId = chat.id;
+										selected={selectedChatIds.has(chat.id)}
+										on:select={(e) => {
+											const shift = e.detail?.shift ?? shiftKey;
+											handleChatSelectRange(chat.id, idx, 'regular', shift);
 										}}
 										on:unselect={() => {
-											selectedChatId = null;
+											selectedChatIds.delete(chat.id);
+											if (lastSelectedChatId === chat.id) {
+												lastSelectedChatId = null;
+											}
 										}}
 										on:change={async () => {
 											initChatList();
@@ -1594,6 +1693,10 @@
 				<div
 					class=" sidebar-bg-gradient-to-t bg-linear-to-t from-gray-50 dark:from-gray-950 to-transparent from-50% pointer-events-none absolute inset-0 -z-10 -mt-6"
 				></div>
+
+				<!-- Batch Action Bar -->
+				<BatchActionBar chatIds={selectedChatIds} onClear={clearSelection} />
+
 				<div class="flex flex-col font-primary">
 					{#if $user !== undefined && $user !== null}
 						<UserMenu

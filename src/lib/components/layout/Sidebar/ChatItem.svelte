@@ -63,6 +63,9 @@
 	export let selected = false;
 	export let shiftKey = false;
 
+	// Props for multi-select checkbox
+	let showCheckbox = false;
+
 	export let onDragEnd = () => {};
 
 	function formatTimeAgo(timestamp: number): string {
@@ -427,6 +430,9 @@
 				placeholder={generating ? $i18n.t('Generating...') : ''}
 				disabled={generating}
 				on:keydown={chatTitleInputKeydownHandler}
+				on:focus={() => {
+					showCheckbox = true;
+				}}
 				on:blur={async (e) => {
 					if (doubleClicked) {
 						e.preventDefault();
@@ -454,8 +460,8 @@
 					? 'bg-gray-100 dark:bg-gray-950 selected'
 					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
 			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
+			on:click={(e) => {
+				dispatch('select', { shift: shiftKey });
 
 				if ($selectedFolder) {
 					selectedFolder.set(null);
@@ -485,6 +491,31 @@
 			on:focus={(e) => {}}
 			draggable="false"
 		>
+			<!-- Multi-select checkbox (hover-visible) -->
+			<button
+				class="shrink-0 self-center p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all {selected
+					? 'opacity-100 bg-gray-200 dark:bg-gray-700'
+					: ''}"
+				on:click={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+
+					if (selected) {
+						dispatch('unselect');
+					} else {
+						dispatch('select', { shift: false });
+					}
+				}}
+				aria-label={$i18n.t('Select chat')}
+				type="button"
+			>
+				{#if selected}
+					<Check className="size-3.5" strokeWidth="3" />
+				{:else}
+					<div class="size-3.5" />
+				{/if}
+			</button>
+
 			<!-- Loading spinner for active chat (left side) -->
 			{#if $activeChatIds.has(id)}
 				<div class="shrink-0 self-center pr-2">
@@ -531,10 +562,11 @@
 			: 'right-1'} top-[4px] py-1 pr-0.5 mr-1.5 pl-5 bg-linear-to-l from-80%
 
               to-transparent"
-		on:mouseenter={(e) => {
+		on:mouseenter={() => {
 			mouseOver = true;
+			showCheckbox = true;
 		}}
-		on:mouseleave={(e) => {
+		on:mouseleave={() => {
 			mouseOver = false;
 		}}
 	>
@@ -611,8 +643,9 @@
 					<button
 						aria-label="Chat Menu"
 						class=" self-center dark:hover:text-white transition m-0"
-						on:click={() => {
-							dispatch('select');
+						on:click={(e) => {
+							e.stopPropagation();
+							dispatch('select', { shift: shiftKey });
 						}}
 					>
 						<svg
