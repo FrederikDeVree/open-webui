@@ -44,7 +44,9 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		deleteChatById,
+		archiveChatById
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -85,6 +87,15 @@
 
 	let selectedChatId = null;
 	let showCreateChannel = false;
+
+	// Selection state for multi-select
+	let selectedChatIds = new Set<string>();
+	let lastSelectedChatId: string | null = null;
+	let selectionMode = false;
+	let bulkDeleting = false;
+	let bulkArchiving = false;
+	let bulkPinning = false;
+	let bulkMoving = false;
 
 	// Pagination variables
 	let chatListLoading = false;

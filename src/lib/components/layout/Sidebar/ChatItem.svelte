@@ -62,6 +62,7 @@
 
 	export let selected = false;
 	export let shiftKey = false;
+	export let isSelected = false;
 
 	export let onDragEnd = () => {};
 
@@ -452,22 +453,32 @@
 				? 'bg-gray-100 dark:bg-gray-900 selected'
 				: selected
 					? 'bg-gray-100 dark:bg-gray-950 selected'
-					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
+					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  {isSelected ? 'bg-indigo-100 dark:bg-indigo-950/30' : ''} whitespace-nowrap text-ellipsis"
 			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
+			on:click={(e) => {
+				const shouldOpen = !shiftKey && !e.ctrlKey && !e.metaKey;
 
-				if ($selectedFolder) {
-					selectedFolder.set(null);
+				dispatch('chat-click', {
+					id,
+					ctrlKey: e.ctrlKey || e.metaKey,
+					shiftKey,
+					event: e
+				});
+
+				if (shouldOpen) {
+					dispatch('select');
+
+					if ($selectedFolder) {
+						selectedFolder.set(null);
+					}
+
+					if ($mobile) {
+						showSidebar.set(false);
+					}
+
+					unread = false;
+					lastReadAt = Date.now() / 1000;
 				}
-
-				if ($mobile) {
-					showSidebar.set(false);
-				}
-
-				// Optimistically mark as read in UI when clicked
-				unread = false;
-				lastReadAt = Date.now() / 1000;
 			}}
 			on:dblclick={async (e) => {
 				e.preventDefault();
@@ -485,11 +496,20 @@
 			on:focus={(e) => {}}
 			draggable="false"
 		>
-			<!-- Loading spinner for active chat (left side) -->
-			{#if $activeChatIds.has(id)}
-				<div class="shrink-0 self-center pr-2">
-					<Spinner className="size-3" />
+			<!-- Selection checkmark -->
+			{#if isSelected}
+				<div class="shrink-0 self-center pr-2 flex items-center">
+					<svg class="size-3 text-indigo-600 dark:text-indigo-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+						<path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" />
+					</svg>
 				</div>
+			{:else}
+				<!-- Loading spinner for active chat (left side) -->
+				{#if $activeChatIds.has(id)}
+					<div class="shrink-0 self-center pr-2">
+						<Spinner className="size-3" />
+					</div>
+				{/if}
 			{/if}
 
 			<div class="flex self-center flex-1 w-full min-w-0">
