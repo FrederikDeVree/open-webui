@@ -192,9 +192,6 @@
 	let showRateComment = false;
 
 	let runningActionId: string | null = null;
-	$: if (runningActionId && statusEntries.at(-1)?.done === true) {
-		runningActionId = null;
-	}
 
 	const copyToClipboard = async (text) => {
 		text = removeAllDetails(text);
@@ -1465,9 +1462,13 @@
 												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
-												on:click={() => {
+												on:click={async () => {
 													runningActionId = action.id;
-													actionMessage(action.id, message);
+													try {
+														await actionMessage(action.id, message);
+													} finally {
+														runningActionId = null;
+													}
 												}}
 											>
 												{#if runningActionId === action.id}
