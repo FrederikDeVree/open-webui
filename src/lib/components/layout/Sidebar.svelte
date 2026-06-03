@@ -98,8 +98,7 @@
 	// Batch action state
 	let showDeleteConfirm = false;
 	let showFolderDropdown = false;
-	let showMoveFolderModal = false;
-	let showMoveFolderModal = false; // kept for reference
+	let showMoveFolderModal = false; // kept for reference (not used - moved to dropdown)
 	let selectedFolderForMove: string | null = null;
 
 	// Pagination variables
