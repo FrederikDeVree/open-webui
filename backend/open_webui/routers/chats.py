@@ -1576,3 +1576,92 @@ async def delete_tag_by_id_and_tag_name(
         return await Tags.get_tags_by_ids_and_user_id(tags, user.id, db=db)
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)
+
+
+############################
+# BatchDeleteChats
+############################
+
+
+class ChatIdsForm(BaseModel):
+    chat_ids: list[str]
+
+
+@router.post('/batch/delete', response_model=bool)
+async def batch_delete_chats(
+    form_data: ChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if not form_data.chat_ids:
+        return False
+    count = await Chats.batch_delete_chats_by_ids(form_data.chat_ids, user.id, db=db)
+    return count > 0
+
+
+############################
+# BatchArchiveChats
+############################
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    form_data: ChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if not form_data.chat_ids:
+        return False
+    count = await Chats.batch_archive_chats_by_ids(form_data.chat_ids, user.id, db=db)
+    return count > 0
+
+
+############################
+# BatchUnarchiveChats
+############################
+
+
+@router.post('/batch/unarchive', response_model=bool)
+async def batch_unarchive_chats(
+    form_data: ChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if not form_data.chat_ids:
+        return False
+    count = await Chats.batch_unarchive_chats_by_ids(form_data.chat_ids, user.id, db=db)
+    return count > 0
+
+
+############################
+# BatchMoveChats
+############################
+
+
+class ChatBatchMoveForm(BaseModel):
+    chat_ids: list[str]
+    folder_id: str | None = None
+
+
+@router.post('/batch/move', response_model=bool)
+async def batch_move_chats(
+    form_data: ChatBatchMoveForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if not form_data.chat_ids:
+        return False
+
+    # Validate folder_id if provided
+    if form_data.folder_id is not None:
+        folder = await Folders.get_folder_by_id_and_user_id(form_data.folder_id, user.id, db=db)
+        if not folder:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=ERROR_MESSAGES.NOT_FOUND,
+            )
+
+    count = await Chats.batch_update_folder_id_by_ids(
+        form_data.chat_ids, user.id, form_data.folder_id, db=db
+    )
+    return count > 0

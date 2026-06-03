@@ -126,6 +126,10 @@ export const desktopEvent: Writable<DesktopEvent | null> = writable(null);
 export const scrollPaginationEnabled = writable(false);
 export const currentChatPage = writable(1);
 
+// Multi-select checkbox state
+export const selectedChatIds: Writable<Set<string>> = writable(new Set());
+export const checkboxMode = writable(false);
+
 export const isLastActiveTab = writable(true);
 export const playingNotificationSound = writable(false);
 

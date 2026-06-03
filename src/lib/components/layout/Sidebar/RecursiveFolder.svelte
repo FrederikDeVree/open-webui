@@ -11,7 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 
-	import { chatId, mobile, selectedFolder, showSidebar } from '$lib/stores';
+	import { chatId, mobile, selectedFolder, showSidebar, selectedChatIds, checkboxMode as checkboxModeStore } from '$lib/stores';
 
 	import {
 		deleteFolderById,
@@ -685,6 +685,19 @@
 							updatedAt={chat.updated_at}
 							lastReadAt={chat.last_read_at}
 							{shiftKey}
+							checkboxMode={$checkboxModeStore}
+							isSelected={$selectedChatIds.has(chat.id)}
+							on:toggleSelect={(e) => {
+								selectedChatIds.update((s) => {
+									if (s.has(e.detail.id)) { s.delete(e.detail.id); } else { s.add(e.detail.id); }
+									return new Set(s);
+								});
+								if ($selectedChatIds.size > 0) { checkboxModeStore.set(true); } else { checkboxModeStore.set(false); }
+							}}
+							on:shiftClick={(e) => {
+								selectedChatIds.update((s) => { s.add(e.detail.id); return new Set(s); });
+								checkboxModeStore.set(true);
+							}}
 							on:change={(e) => {
 								dispatch('change', e.detail);
 							}}

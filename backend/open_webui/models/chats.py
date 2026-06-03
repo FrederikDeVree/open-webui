@@ -720,14 +720,26 @@ class ChatTable:
         except Exception:
             return False
 
-    async def unarchive_all_chats_by_user_id(self, user_id: str, db: AsyncSession | None = None) -> bool:
+    async def batch_unarchive_chats_by_ids(
+        self, chat_ids: list[str], user_id: str, db: AsyncSession | None = None
+    ) -> int:
+        """Unarchive chats by IDs for a given user. Returns count of unarchived chats."""
         try:
             async with get_async_db_context(db) as session:
-                await session.execute(update(Chat).filter_by(user_id=user_id).values(archived=False))
+                stmt = (
+                    update(Chat)
+                    .where(
+                        Chat.id.in_(chat_ids),
+                        Chat.user_id == user_id,
+                        Chat.archived == True,
+                    )
+                    .values(archived=False)
+                )
+                result = await session.execute(stmt)
                 await session.commit()
-                return True
+                return result.rowcount
         except Exception:
-            return False
+            return 0
 
     async def update_chat_share_id_by_id(
         self, id: str, share_id: str | None, db: AsyncSession | None = None
@@ -775,6 +787,63 @@ class ChatTable:
                 return True
         except Exception:
             return False
+
+    async def batch_delete_chats_by_ids(
+        self, chat_ids: list[str], user_id: str, db: AsyncSession | None = None
+    ) -> int:
+        """Delete chats by IDs for a given user. Returns count of deleted chats."""
+        try:
+            async with get_async_db_context(db) as session:
+                stmt = delete(Chat).where(
+                    Chat.id.in_(chat_ids),
+                    Chat.user_id == user_id,
+                )
+                result = await session.execute(stmt)
+                await session.commit()
+                return result.rowcount
+        except Exception:
+            return 0
+
+    async def batch_archive_chats_by_ids(
+        self, chat_ids: list[str], user_id: str, db: AsyncSession | None = None
+    ) -> int:
+        """Archive chats by IDs for a given user. Returns count of archived chats."""
+        try:
+            async with get_async_db_context(db) as session:
+                stmt = (
+                    update(Chat)
+                    .where(
+                        Chat.id.in_(chat_ids),
+                        Chat.user_id == user_id,
+                        Chat.archived == False,
+                    )
+                    .values(archived=True, folder_id=None)
+                )
+                result = await session.execute(stmt)
+                await session.commit()
+                return result.rowcount
+        except Exception:
+            return 0
+
+    async def batch_update_folder_id_by_ids(
+        self, chat_ids: list[str], user_id: str, folder_id: str | None, db: AsyncSession | None = None
+    ) -> int:
+        """Move chats to a folder by IDs for a given user. Returns count of updated chats."""
+        try:
+            async with get_async_db_context(db) as session:
+                stmt = (
+                    update(Chat)
+                    .where(
+                        Chat.id.in_(chat_ids),
+                        Chat.user_id == user_id,
+                    )
+                    .values(folder_id=folder_id, updated_at=int(time.time()))
+                )
+                result = await session.execute(stmt)
+                await session.commit()
+                return result.rowcount
+        except Exception:
+            return 0
 
     async def get_archived_chat_list_by_user_id(
         self,

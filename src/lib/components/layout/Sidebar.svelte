@@ -29,7 +29,9 @@
 		selectedFolder,
 		WEBUI_NAME,
 		sidebarWidth,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds,
+		checkboxMode
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -44,7 +46,10 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		batchDeleteChats,
+		batchArchiveChats,
+		batchMoveChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -74,6 +79,9 @@
 	import Code from '../icons/Code.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
+	import GarbageBin from '../icons/GarbageBin.svelte';
+	import ArchiveBox from '../icons/ArchiveBox.svelte';
+	import FolderIcon from '../icons/Folder.svelte';
 
 	const BREAKPOINT = 768;
 	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
@@ -85,6 +93,12 @@
 
 	let selectedChatId = null;
 	let showCreateChannel = false;
+
+	// Multi-select state
+	let lastClickedChatId = null;
+	let showBatchActions = false;
+	let moveFolderId = null;
+	let isProcessingBatch = false;
 
 	// Pagination variables
 	let chatListLoading = false;
@@ -105,6 +119,14 @@
 	let newFolderId = null;
 
 	$: pinnedItems = $settings?.pinnedMenuItems ?? DEFAULT_PINNED_ITEMS;
+
+	// Watch selectedChatIds to show/hide batch actions
+	$: {
+		showBatchActions = $selectedChatIds.size > 0;
+		if ($selectedChatIds.size === 0) {
+			checkboxMode.set(false);
+		}
+	}
 
 	const isMenuItemVisible = (id) => {
 		switch (id) {
@@ -148,6 +170,121 @@
 			playground: { label: 'Playground', href: '/playground', iconType: 'playground' }
 		};
 		return items[id];
+	};
+
+	// Multi-select checkbox state
+	let lastShiftClickedId = null;
+
+	const toggleSelectChat = async (id) => {
+		selectedChatIds.update((ids) => {
+			if (ids.has(id)) {
+				ids.delete(id);
+			} else {
+				ids.add(id);
+			}
+			return new Set(ids);
+		});
+		if ($selectedChatIds.size > 0) {
+			checkboxMode.set(true);
+		} else {
+			checkboxMode.set(false);
+		}
+		lastShiftClickedId = id;
+	};
+
+	const shiftClickChat = async (id) => {
+		if (lastShiftClickedId === null) {
+			lastShiftClickedId = id;
+			await toggleSelectChat(id);
+			return;
+		}
+
+		// Build ordered list of all chats (pinned first, then regular)
+		const allChatIds = [];
+		for (const chat of $pinnedChats) {
+			allChatIds.push(chat.id);
+		}
+		for (const chat of $chats) {
+			allChatIds.push(chat.id);
+		}
+
+		const fromIdx = allChatIds.indexOf(lastShiftClickedId);
+		const toIdx = allChatIds.indexOf(id);
+		if (fromIdx === -1 || toIdx === -1) return;
+
+		const start = Math.min(fromIdx, toIdx);
+		const end = Math.max(fromIdx, toIdx);
+
+		// Update selection: toggle all in range
+		selectedChatIds.update((ids) => {
+			for (let i = start; i <= end; i++) {
+				if (allChatIds[i]) {
+					if (ids.has(allChatIds[i])) {
+						ids.delete(allChatIds[i]);
+					} else {
+						ids.add(allChatIds[i]);
+					}
+				}
+			}
+			return new Set(ids);
+		});
+
+		checkboxMode.set(true);
+		lastShiftClickedId = id;
+	};
+
+	const clearSelection = async () => {
+		selectedChatIds.set(new Set());
+		checkboxMode.set(false);
+		lastShiftClickedId = null;
+	};
+
+	const batchDeleteChatsHandler = async () => {
+		const chatIds = Array.from($selectedChatIds);
+		if (chatIds.length === 0) return;
+
+		const confirmed = confirm($i18n.t('Are you sure you want to delete {{COUNT}} chat(s)?', { COUNT: chatIds.length }));
+		if (!confirmed) return;
+
+		try {
+			await batchDeleteChats(localStorage.token, chatIds);
+			await initChatList();
+			toast.success($i18n.t('{{COUNT}} chat(s) deleted.', { COUNT: chatIds.length }));
+			await clearSelection();
+		} catch (e) {
+			toast.error($i18n.t('Failed to delete chats.'));
+		}
+	};
+
+	const batchArchiveChatsHandler = async () => {
+		const chatIds = Array.from($selectedChatIds);
+		if (chatIds.length === 0) return;
+
+		try {
+			await batchArchiveChats(localStorage.token, chatIds);
+			await initChatList();
+			toast.success($i18n.t('{{COUNT}} chat(s) archived.', { COUNT: chatIds.length }));
+			await clearSelection();
+		} catch (e) {
+			toast.error($i18n.t('Failed to archive chats.'));
+		}
+	};
+
+	let showMoveToFolderModal = false;
+	let selectedFolderForMove = null;
+
+	const batchMoveChatsHandler = async (folderId) => {
+		const chatIds = Array.from($selectedChatIds);
+		if (chatIds.length === 0) return;
+
+		try {
+			await batchMoveChats(localStorage.token, chatIds, folderId);
+			await initChatList();
+			toast.success($i18n.t('{{COUNT}} chat(s) moved.', { COUNT: chatIds.length }));
+			await clearSelection();
+		} catch (e) {
+			toast.error($i18n.t('Failed to move chats.'));
+		}
 	};
 
 	const initPinnedMenuSortable = () => {
@@ -468,6 +605,9 @@
 	const onBlur = () => {
 		shiftKey = false;
 		selectedChatId = null;
+		selectedChatIds.set(new Set());
+		checkboxMode.set(false);
+		lastShiftClickedId = null;
 	};
 
 	const MIN_WIDTH = 220;
@@ -1334,6 +1474,7 @@
 							bind:folderRegistry
 							{folders}
 							{shiftKey}
+							checkboxMode={$checkboxMode}
 							onDelete={(folderId) => {
 								selectedFolder.set(null);
 								initChatList();
@@ -1484,12 +1625,19 @@
 												updatedAt={chat.updated_at}
 												lastReadAt={chat.last_read_at}
 												{shiftKey}
-												selected={selectedChatId === chat.id}
+												checkboxMode={$checkboxMode}
+												isSelected={$selectedChatIds.has(chat.id)}
 												on:select={() => {
 													selectedChatId = chat.id;
 												}}
 												on:unselect={() => {
 													selectedChatId = null;
+												}}
+												on:toggleSelect={(e) => {
+													toggleSelectChat(e.detail.id);
+												}}
+												on:shiftClick={(e) => {
+													shiftClickChat(e.detail.id);
 												}}
 												on:change={async () => {
 													initChatList();
@@ -1547,12 +1695,19 @@
 										updatedAt={chat.updated_at}
 										lastReadAt={chat.last_read_at}
 										{shiftKey}
-										selected={selectedChatId === chat.id}
+										checkboxMode={$checkboxMode}
+										isSelected={$selectedChatIds.has(chat.id)}
 										on:select={() => {
 											selectedChatId = chat.id;
 										}}
 										on:unselect={() => {
 											selectedChatId = null;
+										}}
+										on:toggleSelect={(e) => {
+											toggleSelectChat(e.detail.id);
+										}}
+										on:shiftClick={(e) => {
+											shiftClickChat(e.detail.id);
 										}}
 										on:change={async () => {
 											initChatList();
@@ -1592,6 +1747,82 @@
 					</div>
 				</Folder>
 			</div>
+
+			<!-- Batch action toolbar -->
+			{#if $selectedChatIds.size > 0}
+				<div class="px-2 py-1.5 border-t border-gray-200 dark:border-gray-800 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur-sm sticky top-0 z-20">
+					<div class="flex items-center justify-between gap-2">
+						<div class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0">
+							<span class="font-medium">{$selectedChatIds.size}</span>
+							<span class="truncate">{$i18n.t('selected')}</span>
+						</div>
+						<div class="flex items-center gap-1 shrink-0">
+							<!-- Clear selection -->
+							<button
+								class="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
+								on:click={clearSelection}
+								aria-label={$i18n.t('Clear selection')}
+								title={$i18n.t('Clear selection')}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-4 h-4"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+							</button>
+							<!-- Move to folder -->
+							{#if $folders.length > 0}
+								<button
+									class="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
+									on:click={() => { showMoveToFolderModal = !showMoveToFolderModal; }}
+									aria-label={$i18n.t('Move to folder')}
+									title={$i18n.t('Move to folder')}
+								>
+									<FolderIcon className="w-4 h-4" strokeWidth="2" />
+								</button>
+								{#if showMoveToFolderModal}
+									<div class="absolute left-2 right-2 top-10 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-2 max-h-40 overflow-y-auto">
+										<button
+											class="w-full text-left px-2.5 py-1.5 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-700 dark:text-gray-300"
+											on:click={() => {
+												batchMoveChatsHandler(null);
+												showMoveToFolderModal = false;
+											}}
+										>
+											{$i18n.t('Remove from folder')}
+										</button>
+										{#each $folders as folder}
+											<button
+												class="w-full text-left px-2.5 py-1.5 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-700 dark:text-gray-300"
+												on:click={() => {
+													batchMoveChatsHandler(folder.id);
+													showMoveToFolderModal = false;
+												}}
+											>
+												<span class="truncate">{folder.name}</span>
+											</button>
+										{/each}
+									</div>
+								{/if}
+							{/if}
+							<!-- Archive -->
+							<button
+								class="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition text-gray-500 dark:text-gray-400"
+								on:click={batchArchiveChatsHandler}
+								aria-label={$i18n.t('Archive')}
+								title={$i18n.t('Archive')}
+							>
+								<ArchiveBox className="w-4 h-4" strokeWidth="2" />
+							</button>
+							<!-- Delete -->
+							<button
+								class="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition text-red-500 dark:text-red-400"
+								on:click={batchDeleteChatsHandler}
+								aria-label={$i18n.t('Delete')}
+								title={$i18n.t('Delete')}
+							>
+								<GarbageBin className="w-4 h-4" strokeWidth="2" />
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
 
 			<div class="px-1.5 pt-1.5 pb-2 sticky bottom-0 z-10 -mt-3 sidebar">
 				<div

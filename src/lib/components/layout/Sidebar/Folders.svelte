@@ -9,6 +9,7 @@
 
 	export let folders = {};
 	export let shiftKey = false;
+	export let checkboxMode = false;
 
 	export let onDelete = (folderId) => {};
 
@@ -47,6 +48,7 @@
 		{folders}
 		{folderId}
 		{shiftKey}
+		{checkboxMode}
 		{onDelete}
 		{onItemMove}
 		on:import={(e) => {
