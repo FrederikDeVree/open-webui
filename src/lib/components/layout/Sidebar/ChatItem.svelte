@@ -261,12 +261,7 @@
 				aria-label="Select chat"
 				type="button"
 			>
-				<div class="w-4 h-4 rounded flex items-center justify-center border-2 transition-colors"
-					class:border-gray-300 dark:border-gray-600={!isSelected}
-					class:!border-blue-500={isSelected}
-					class:bg-transparent={!isSelected}
-					class:bg-blue-500={isSelected}
-				>
+				<div class="w-4 h-4 rounded flex items-center justify-center border-2 transition-colors border-gray-300 dark:border-gray-600 {isSelected ? 'border-blue-500 bg-blue-500' : 'bg-transparent'}">
 					{#if isSelected}
 						<Check className="w-3 h-3 text-white" strokeWidth="3" />
 					{/if}
