@@ -6,9 +6,9 @@
 	import { chatId, selectedFolder } from '$lib/stores';
 
 	export let folderRegistry = {};
-
 	export let folders = {};
 	export let shiftKey = false;
+	export let isMultiSelecting = false;
 
 	export let onDelete = (folderId) => {};
 
@@ -47,8 +47,12 @@
 		{folders}
 		{folderId}
 		{shiftKey}
+		isMultiSelecting={isMultiSelecting}
 		{onDelete}
 		{onItemMove}
+		on:checkbox={(e) => {
+			dispatch('checkbox', e.detail);
+		}}
 		on:import={(e) => {
 			dispatch('import', e.detail);
 		}}

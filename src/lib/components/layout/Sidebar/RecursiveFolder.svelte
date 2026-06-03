@@ -4,6 +4,8 @@
 	const i18n = getContext('i18n');
 	const dispatch = createEventDispatcher();
 
+	import { sidebarMultiSelectChatIds } from '$lib/stores';
+
 	import DOMPurify from 'dompurify';
 	import fileSaver from 'file-saver';
 	const { saveAs } = fileSaver;
@@ -50,6 +52,9 @@
 	export let folders;
 	export let folderId;
 	export let shiftKey = false;
+	export let isMultiSelecting = false;
+	export let onCheckboxClick = () => {};
+	export let isChatSelected: (id: string) => boolean = () => false;
 
 	export let className = '';
 
@@ -685,6 +690,11 @@
 							updatedAt={chat.updated_at}
 							lastReadAt={chat.last_read_at}
 							{shiftKey}
+							isMultiSelecting={isMultiSelecting}
+							isChatSelected={$sidebarMultiSelectChatIds.has(chat.id)}
+							on:checkbox={(e) => {
+								dispatch('checkbox', e.detail);
+							}}
 							on:change={(e) => {
 								dispatch('change', e.detail);
 							}}

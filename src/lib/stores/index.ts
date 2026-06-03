@@ -95,6 +95,9 @@ export const showSearch = writable(false);
 export const showSettings = writable(false);
 export const showShortcuts = writable(false);
 export const showArchivedChats = writable(false);
+// Multi-select for batch operations on chats
+export const sidebarMultiSelectChatIds: Writable<Set<string>> = writable(new Set());
+export const sidebarMultiSelectMode = writable(false);
 export const showChangelog = writable(false);
 
 export const showControls = writable(false);

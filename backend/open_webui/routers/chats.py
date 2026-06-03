@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -184,7 +181,7 @@ async def get_session_user_chat_usage_stats(
                             'created_at': chat.created_at,
                         }
                     )
-                except Exception as e:
+                except Exception:
                     pass
 
         return ChatUsageStatsListResponse(items=chat_stats, total=total)
@@ -818,6 +815,67 @@ async def archive_all_chats(user=Depends(get_verified_user), db: AsyncSession = 
 @router.post('/unarchive/all', response_model=bool)
 async def unarchive_all_chats(user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
     return await Chats.unarchive_all_chats_by_user_id(user.id, db=db)
+
+
+###############################################
+# --- Batch Operations ---
+###############################################
+
+
+class BatchDeleteForm(BaseModel):
+    chat_ids: list[str]
+
+
+class BatchArchiveForm(BaseModel):
+    chat_ids: list[str]
+
+
+class BatchMoveForm(BaseModel):
+    chat_ids: list[str]
+    folder_id: str | None = None
+
+
+@router.post('/batch/delete', response_model=bool)
+async def batch_delete_chats(
+    form_data: BatchDeleteForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if user.role == 'user' and not await has_permission(
+        user.id, 'chat.delete', request.app.state.config.USER_PERMISSIONS, db=db
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
+    chat_ids = form_data.chat_ids
+    if not chat_ids:
+        return False
+    result = await Chats.delete_chats_by_ids(chat_ids, user.id, db=db)
+    return result
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    form_data: BatchArchiveForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    chat_ids = form_data.chat_ids
+    if not chat_ids:
+        return False
+    result = await Chats.archive_chats_by_ids(chat_ids, user.id, db=db)
+    return result
+
+
+@router.post('/batch/move', response_model=bool)
+async def batch_move_chats(
+    form_data: BatchMoveForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    chat_ids = form_data.chat_ids
+    if not chat_ids:
+        return False
+    result = await Chats.move_chats_to_folder(chat_ids, user.id, form_data.folder_id, db=db)
+    return result
 
 
 ############################

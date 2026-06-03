@@ -64,6 +64,10 @@
 	export let selected = false;
 	export let shiftKey = false;
 
+	export let isMultiSelecting = false;
+	export let isChatSelected = false;
+	export let onCheckboxClick = () => {};
+
 	export let onDragEnd = () => {};
 
 	function formatTimeAgo(timestamp: number): string {
@@ -524,6 +528,28 @@
 			on:focus={(e) => {}}
 			draggable="false"
 		>
+			<!-- Multi-select checkbox -->
+			<div
+				class="shrink-0 self-center pr-1.5 transition-opacity duration-200 {isMultiSelecting ? 'opacity-100' : (mouseOver ? 'opacity-100' : 'opacity-0')}"
+				on:click={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					onCheckboxClick();
+				}}
+			>
+				<input
+					type="checkbox"
+					checked={isChatSelected}
+					class="size-3.5 accent-sky-500 cursor-pointer rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
+					onchange={(e) => {
+						e.stopPropagation();
+						e.preventDefault();
+						dispatch('checkbox', { id, event: e });
+						onCheckboxClick();
+					}}
+				/>
+			</div>
+
 			<!-- Loading spinner for active chat (left side) -->
 			{#if $activeChatIds.has(id)}
 				<div class="shrink-0 self-center pr-2">
@@ -594,7 +620,7 @@
 					</button>
 				</Tooltip>
 			</div>
-		{:else if shiftKey && mouseOver}
+		{:else if shiftKey && mouseOver && !isMultiSelecting}
 			<div class=" flex items-center self-center space-x-1.5">
 				<Tooltip content={$i18n.t('Archive')} className="flex items-center">
 					<button

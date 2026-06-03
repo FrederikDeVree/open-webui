@@ -29,7 +29,9 @@
 		selectedFolder,
 		WEBUI_NAME,
 		sidebarWidth,
-		activeChatIds
+		activeChatIds,
+		sidebarMultiSelectChatIds,
+		sidebarMultiSelectMode
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -44,7 +46,10 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		batchDeleteChats,
+		batchArchiveChats,
+		batchMoveChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -74,6 +79,8 @@
 	import Code from '../icons/Code.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
+import Modal from '../common/Modal.svelte';
+import MultiSelectFolderModal from './MultiSelectFolderModal.svelte';
 
 	const BREAKPOINT = 768;
 	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
@@ -82,6 +89,90 @@
 
 	let navElement;
 	let shiftKey = false;
+
+	// Multi-select state
+	let multiSelectLastClickedIdx = -1;
+	let showMoveModal = false;
+	let moveChatIds: string[] = [];
+
+	const resetMultiSelect = () => {
+		sidebarMultiSelectChatIds.set(new Set());
+		sidebarMultiSelectMode.set(false);
+		multiSelectLastClickedIdx = -1;
+	};
+
+	const toggleMultiSelectChat = (chatId: string, idx: number, e: MouseEvent) => {
+		const isShift = e && e.shiftKey;
+		sidebarMultiSelectMode.update((mode) => (mode ? mode : true));
+
+		if (isShift && multiSelectLastClickedIdx >= 0) {
+			// Range select from last clicked to current idx
+			const lastIdx = multiSelectLastClickedIdx;
+			const start = Math.min(lastIdx, idx);
+			const end = Math.max(lastIdx, idx);
+			sidebarMultiSelectChatIds.update((ids) => {
+				const newIds = new Set(ids);
+				for (let i = start; i <= end; i++) {
+					newIds.add($chats[i]?.id ?? '');
+				}
+				return newIds;
+			});
+		} else {
+			// Single toggle
+			sidebarMultiSelectChatIds.update((ids) => {
+				const newIds = new Set(ids);
+				if (newIds.has(chatId)) {
+					newIds.delete(chatId);
+				} else {
+					newIds.add(chatId);
+				}
+				return newIds;
+			});
+			multiSelectLastClickedIdx = idx;
+		}
+	};
+
+	const isInMultiSelect = $sidebarMultiSelectChatIds.size > 0;
+	const isMultiSelectMode = $sidebarMultiSelectMode;
+
+	const handleMultiSelectBatchAction = async (action: string, folderId: string | null = null) => {
+		const selectedIds = [...$sidebarMultiSelectChatIds];
+		if (selectedIds.length === 0) return;
+
+		if (action === 'move') {
+			moveChatIds = selectedIds;
+			showMoveModal = true;
+			return;
+		}
+
+		try {
+			switch (action) {
+				case 'delete':
+					await batchDeleteChats(localStorage.token, selectedIds);
+					break;
+				case 'archive':
+					await batchArchiveChats(localStorage.token, selectedIds);
+					break;
+			}
+			resetMultiSelect();
+			await initChatList();
+		} catch (error) {
+			console.error(`Batch ${action} failed:`, error);
+		}
+	};
+
+	const handleMoveConfirm = async (folderId: string | null) => {
+		if (moveChatIds.length === 0) return;
+		try {
+			await batchMoveChats(localStorage.token, moveChatIds, folderId);
+			resetMultiSelect();
+			await initChatList();
+			toast.success($i18n.t('Chats moved successfully'));
+		} catch (error) {
+			console.error('Move failed:', error);
+			toast.error($i18n.t('Failed to move chats'));
+		}
+	};
 
 	let selectedChatId = null;
 	let showCreateChannel = false;
@@ -468,6 +559,7 @@
 	const onBlur = () => {
 		shiftKey = false;
 		selectedChatId = null;
+		resetMultiSelect();
 	};
 
 	const MIN_WIDTH = 220;
@@ -1107,6 +1199,57 @@
 						</button>
 					</div>
 
+
+					<!-- Batch Action Bar -->
+					{#if isMultiSelectMode}
+						<div class="px-[0.4375rem] flex items-center gap-2 py-1.5 mt-1">
+							<div class="flex-1 flex items-center justify-between rounded-xl px-3 py-1.5 bg-sky-500/10 dark:bg-sky-500/20 border border-sky-500/20">
+								<span class="text-xs text-sky-600 dark:text-sky-400 font-medium">
+									{$sidebarMultiSelectChatIds.size} selected
+								</span>
+								<button
+									class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition p-0.5"
+									on:click={resetMultiSelect}
+									aria-label="Clear selection"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-4">
+										<path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+									</svg>
+								</button>
+							</div>
+						</div>
+						<div class="px-[0.4375rem] flex justify-center gap-2 py-1.5">
+							<button
+								class="flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 transition text-xs font-medium border border-red-500/20"
+								on:click={() => handleMultiSelectBatchAction('delete')}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-3.5">
+									<path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.25a.75.75 0 0 0-1.5 0v4.5a.75.75 0 0 0 1.5 0v-4.5Zm-.75 7.5a.75.75 0 0 1 0-1.5.75.75 0 0 1 0 1.5Z" clip-rule="evenodd" />
+								</svg>
+								Delete
+							</button>
+							<button
+								class="flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-600 dark:text-gray-400 transition text-xs font-medium border border-gray-500/20"
+								on:click={() => handleMultiSelectBatchAction('archive')}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-3.5">
+									<path d="M10 2a.75.75 0 0 1 .75.75v1.338l3.94-.875a.75.75 0 0 1 .87 1.042l-3.47 6.246a.75.75 0 0 1-1.34 0L6.44 4.205a.75.75 0 0 1 .87-1.042l3.94.875V2.75A.75.75 0 0 1 10 2ZM3.25 7.25a.75.75 0 0 1 .75.75v8.25a2.25 2.25 0 0 0 2.25 2.25h7a2.25 2.25 0 0 0 2.25-2.25V8a0.75.75 0 0 1 1.5 0v8.25A3.75 3.75 0 0 1 13.25 20h-7A3.75 3.75 0 0 1 2 16.25V8a.75.75 0 0 1 .75-.75Z" />
+								</svg>
+								Archive
+							</button>
+							<button
+								class="flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 transition text-xs font-medium border border-amber-500/20"
+								on:click={() => handleMultiSelectBatchAction('move')}
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-3.5">
+									<path d="M15.5 10a5.5 5.5 0 1 1-5.5-5.5A5.5 5.5 0 0 1 15.5 10Z" />
+									<path fill-rule="evenodd" d="M10 3a.75.75 0 0 1 .75.75v5.993l2.34-2.34a.75.75 0 1 1 1.06 1.06l-3.62 3.62a.75.75 0 0 1-1.06 0L4.85 7.46a.75.75 0 0 1 1.06-1.06l2.34 2.34V3.75A.75.75 0 0 1 10 3Zm0 14a.75.75 0 0 1-.75-.75v-5.993l-2.34 2.34a.75.75 0 0 1-1.06-1.06l3.62-3.62a.75.75 0 0 1 1.06 0l3.62 3.62a.75.75 0 0 1-1.06 1.06L10.75 10.25V16.25A.75.75 0 0 1 10 17Z" clip-rule="evenodd" />
+								</svg>
+								Move
+							</button>
+						</div>
+					{/if}
+
 					<div id="pinned-menu-items-list">
 						{#each pinnedItems as itemId (itemId)}
 							{@const meta = getMenuItemMeta(itemId)}
@@ -1334,6 +1477,7 @@
 							bind:folderRegistry
 							{folders}
 							{shiftKey}
+							isMultiSelecting={isMultiSelectMode}
 							onDelete={(folderId) => {
 								selectedFolder.set(null);
 								initChatList();
@@ -1347,6 +1491,10 @@
 							}}
 							on:change={async () => {
 								initChatList();
+							}}
+							on:checkbox={(e) => {
+								const { id: cid, index: cidx, event } = e.detail;
+								toggleMultiSelectChat(cid, cidx, event);
 							}}
 						/>
 					</Folder>
@@ -1485,6 +1633,8 @@
 												lastReadAt={chat.last_read_at}
 												{shiftKey}
 												selected={selectedChatId === chat.id}
+												isMultiSelecting={isMultiSelectMode}
+												isChatSelected={$sidebarMultiSelectChatIds.has(chat.id)}
 												on:select={() => {
 													selectedChatId = chat.id;
 												}}
@@ -1497,6 +1647,10 @@
 												on:tag={(e) => {
 													const { type, name } = e.detail;
 													tagEventHandler(type, name, chat.id);
+												}}
+												on:checkbox={(e) => {
+													const { id, index, event } = e.detail;
+													toggleMultiSelectChat(id, index, event);
 												}}
 											/>
 										{/each}
@@ -1548,6 +1702,11 @@
 										lastReadAt={chat.last_read_at}
 										{shiftKey}
 										selected={selectedChatId === chat.id}
+										isMultiSelecting={isMultiSelectMode}
+										isChatSelected={$sidebarMultiSelectChatIds.has(chat.id)}
+										on:checkbox={(e) => {
+											toggleMultiSelectChat(e.detail.id, idx, e);
+										}}
 										on:select={() => {
 											selectedChatId = chat.id;
 										}}

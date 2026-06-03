@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 import uuid
 
 # local imports
-from open_webui.internal.db import Base, JSONField, get_async_db_context
+from open_webui.internal.db import Base, get_async_db_context
 from open_webui.models.automations import AutomationRun
 from open_webui.models.chat_messages import ChatMessage, ChatMessages
 from open_webui.models.folders import Folders
-from open_webui.models.tags import Tag, TagModel, Tags
+from open_webui.models.tags import TagModel, Tags
 from open_webui.utils.misc import sanitize_data_for_db, sanitize_text_for_db
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
@@ -1413,7 +1412,7 @@ class ChatTable:
             log.info(f'DB dialect name: {dialect_name}')
             if dialect_name == 'sqlite':
                 stmt = stmt.filter(
-                    text(f"EXISTS (SELECT 1 FROM json_each(Chat.meta, '$.tags') WHERE json_each.value = :tag_id)")
+                    text("EXISTS (SELECT 1 FROM json_each(Chat.meta, '$.tags') WHERE json_each.value = :tag_id)")
                 ).params(tag_id=tag_id)
             elif dialect_name == 'postgresql':
                 stmt = stmt.filter(
@@ -1623,7 +1622,6 @@ class ChatTable:
     async def delete_shared_chats_by_user_id(self, user_id: str, db: AsyncSession | None = None) -> bool:
         """Delete all shared chat snapshots created by a user."""
         from open_webui.models.shared_chats import SharedChat as SharedChatTable
-        from open_webui.models.shared_chats import SharedChats
 
         try:
             async with get_async_db_context(db) as session:
@@ -1755,6 +1753,60 @@ class ChatTable:
             if row is None or row[0] is None:
                 return []
             return row[0]
+
+    async def delete_chats_by_ids(self, ids: list[str], user_id: str, db: AsyncSession | None = None) -> bool:
+        """Delete multiple chats by their IDs for a given user."""
+        try:
+            async with get_async_db_context(db) as session:
+                chat_ids_stmt = select(Chat.id).filter_by(user_id=user_id).where(Chat.id.in_(ids))
+                await session.execute(
+                    update(AutomationRun).filter(AutomationRun.chat_id.in_(chat_ids_stmt)).values(chat_id=None)
+                )
+                await session.execute(delete(ChatMessage).filter(ChatMessage.chat_id.in_(chat_ids_stmt)))
+                await session.execute(delete(Chat).filter_by(user_id=user_id).where(Chat.id.in_(ids)))
+                await session.commit()
+                return True
+        except Exception:
+            return False
+
+    async def archive_chats_by_ids(self, ids: list[str], user_id: str, db: AsyncSession | None = None) -> bool:
+        """Archive multiple chats by their IDs for a given user."""
+        try:
+            async with get_async_db_context(db) as session:
+                chat_query = select(Chat).filter_by(user_id=user_id).where(Chat.id.in_(ids))
+                result = await session.execute(chat_query)
+                chats = result.scalars().all()
+
+                for chat in chats:
+                    chat.archived = True
+                    chat.folder_id = None
+                    chat.updated_at = int(time.time())
+
+                await session.commit()
+                return True
+        except Exception:
+            return False
+
+    async def move_chats_to_folder(
+        self,
+        ids: list[str],
+        user_id: str,
+        folder_id: str | None,
+        db: AsyncSession | None = None,
+    ) -> bool:
+        """Move multiple chats to a folder (or unassign from folder)."""
+        try:
+            async with get_async_db_context(db) as session:
+                await session.execute(
+                    update(Chat)
+                    .filter_by(user_id=user_id)
+                    .where(Chat.id.in_(ids))
+                    .values(folder_id=folder_id, updated_at=int(time.time()))
+                )
+                await session.commit()
+                return True
+        except Exception:
+            return False
 
 
 Chats = ChatTable()  # singleton chats repository
