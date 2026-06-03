@@ -29,7 +29,8 @@
 		selectedFolder,
 		WEBUI_NAME,
 		sidebarWidth,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -44,7 +45,10 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		batchDeleteChats,
+		batchArchiveChats,
+		batchMoveChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -58,6 +62,7 @@
 	import ChatItem from './Sidebar/ChatItem.svelte';
 	import Spinner from '../common/Spinner.svelte';
 	import Loader from '../common/Loader.svelte';
+	import DeleteConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import Folder from '../common/Folder.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import Folders from './Sidebar/Folders.svelte';
@@ -85,6 +90,17 @@
 
 	let selectedChatId = null;
 	let showCreateChannel = false;
+
+	// Multi-select state
+	let lastSelectedChatId: string | null = null;
+	let allChatList: Array<{ id: string; title: string }> = [];
+
+	// Batch action state
+	let showDeleteConfirm = false;
+	let showFolderDropdown = false;
+	let showMoveFolderModal = false;
+	let showMoveFolderModal = false; // kept for reference
+	let selectedFolderForMove: string | null = null;
 
 	// Pagination variables
 	let chatListLoading = false;
@@ -468,6 +484,132 @@
 	const onBlur = () => {
 		shiftKey = false;
 		selectedChatId = null;
+		selectedChatIds.set(new Set());
+		lastSelectedChatId = null;
+		allChatList = [];
+	};
+
+	// Batch action handler functions
+	const handleCheckboxChange = (chatId: string) => {
+		lastSelectedChatId = chatId;
+	};
+
+	const handleRangeSelect = async (chatId: string) => {
+		// Get all visible chat IDs in order
+		const allIds: string[] = [];
+		// Pinned chats
+		for (const chat of $pinnedChats ?? []) {
+			allIds.push(chat.id);
+		}
+		// Normal chats
+		for (const chat of $chats ?? []) {
+			allIds.push(chat.id);
+		}
+
+		const clickedIdx = allIds.indexOf(chatId);
+		const lastIdx = allIds.indexOf(lastSelectedChatId ?? '');
+
+		if (clickedIdx === -1 || lastIdx === -1) {
+			// Fallback: just toggle this chat
+			onCheckboxToggle(chatId);
+			return;
+		}
+
+		const startIdx = Math.min(clickedIdx, lastIdx);
+		const endIdx = Math.max(clickedIdx, lastIdx);
+
+		// Update selection to include all chats in range
+		selectedChatIds.update((ids) => {
+			const next = new Set(ids);
+			for (let i = startIdx; i <= endIdx; i++) {
+				next.add(allIds[i]);
+			}
+			return next;
+		});
+	};
+
+	const onCheckboxToggle = (chatId: string) => {
+		selectedChatIds.update((ids) => {
+			const next = new Set(ids);
+			if (next.has(chatId)) {
+				next.delete(chatId);
+			} else {
+				next.add(chatId);
+			}
+			return next;
+		});
+		lastSelectedChatId = chatId;
+	};
+
+	const handleSelectAll = () => {
+		if ($selectedChatIds.size > 0) {
+			// Deselect all
+			selectedChatIds.set(new Set());
+			lastSelectedChatId = null;
+		} else {
+			// Select all visible chats
+			const allIds = new Set<string>();
+			for (const chat of $pinnedChats ?? []) {
+				allIds.add(chat.id);
+			}
+			for (const chat of $chats ?? []) {
+				allIds.add(chat.id);
+			}
+			selectedChatIds.set(allIds);
+			lastSelectedChatId = allIds.size > 0 ? [...allIds][allIds.size - 1] : null;
+		}
+	};
+
+	const batchDeleteChatsHandler = async () => {
+		const ids = [...$selectedChatIds];
+		if (ids.length === 0) return;
+
+		try {
+			await batchDeleteChats(localStorage.token, ids);
+			await initChatList();
+			selectedChatIds.set(new Set());
+			lastSelectedChatId = null;
+			showDeleteConfirm = false;
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+	};
+
+	const batchArchiveChatsHandler = async () => {
+		const ids = [...$selectedChatIds];
+		if (ids.length === 0) return;
+
+		try {
+			await batchArchiveChats(localStorage.token, ids);
+			await initChatList();
+			selectedChatIds.set(new Set());
+			lastSelectedChatId = null;
+			showArchiveConfirm = false;
+			toast.success($i18n.t('Chats archived.'));
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+	};
+
+	const batchMoveChatsHandler = async (folderId = null) => {
+		const ids = [...$selectedChatIds];
+		if (ids.length === 0) return;
+
+		try {
+			await batchMoveChats(localStorage.token, ids, folderId);
+			await initChatList();
+			selectedChatIds.set(new Set());
+			lastSelectedChatId = null;
+			showFolderDropdown = false;
+			toast.success($i18n.t('Chats moved successfully'));
+		} catch (error) {
+			toast.error(`${error}`);
+		}
+	};
+
+	const clearSelection = () => {
+		selectedChatIds.set(new Set());
+		lastSelectedChatId = null;
 	};
 
 	const MIN_WIDTH = 220;
@@ -1420,6 +1562,164 @@
 						}
 					}}
 				>
+					{#if $selectedChatIds.size > 0}
+						<!-- Batch Action Bar -->
+						<div class="flex items-center gap-2 px-2.5 py-2 bg-blue-50 dark:bg-blue-950/50 rounded-xl mb-2 border border-blue-100 dark:border-blue-900">
+							<div class="flex-1 flex items-center gap-2">
+								<span class="text-sm font-medium text-blue-700 dark:text-blue-300">
+									{$selectedChatIds.size} {$selectedChatIds.size === 1 ? 'chat' : 'chats'} selected
+								</span>
+							</div>
+							<div class="flex items-center gap-1">
+								<button
+									class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition"
+									on:click={() => { showDeleteConfirm = true; }}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3.5">
+										<path d="M2.5 3.5A1.5 1.5 0 0 1 4 2h8a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 6v-1Zm1.5.5h9V3.5a.5.5 0 0 0-.5-.5H4.5a.5.5 0 0 0-.5.5v.5Z" />
+										<path d="M5.5 7h5a.5.5 0 0 1 .5.5v1a4.5 4.5 0 0 1-4.5 4.5h-.5A4.5 4.5 0 0 1 2 9v-1a.5.5 0 0 1 .5-.5Zm.5 1v1a3.5 3.5 0 0 0 3.5 3.5h.5a3.5 3.5 0 0 0 3.5-3.5v-1h-7.5Z" />
+									</svg>
+									Delete
+								</button>
+								<button
+									class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+									on:click={() => { showArchiveConfirm = true; }}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3.5">
+										<path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 14.25 14h-11.5Z" />
+										<path d="M7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 6.469a.749.749 0 1 1 1.06-1.06l1.97 1.969Z" />
+									</svg>
+									Archive
+								</button>
+								<!-- Move to folder dropdown -->
+								{#if $folders.length > 0}
+									<div class="relative">
+										<button
+											class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+											on:click={() => { showFolderDropdown = !showFolderDropdown; }}
+										>
+											<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3.5">
+												<path d="M1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.784.784 2 1.75 2ZM1.5 12.251c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V4.25a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25v8.001Z" />
+												<path d="M8 4.5a.5.5 0 0 0-1 0v5.796L5.293 9.293a.5.5 0 1 0-.707.707l2.5 2.5a.5.5 0 0 0 .707 0l2.5-2.5a.5.5 0 0 0-.707-.707L8.5 10.296V4.5Z" />
+											</svg>
+											Move to...
+										</button>
+										{#if showFolderDropdown}
+											<div class="absolute right-0 top-full mt-1 w-48 rounded-lg bg-white dark:bg-gray-850 border border-gray-200 dark:border-gray-700 shadow-lg z-50 overflow-hidden">
+												<button
+													class="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 w-full text-left"
+													on:click={() => {
+														batchMoveChatsHandler(null);
+														showFolderDropdown = false;
+													}}
+												>
+													<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+														<path d="M1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 13.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.784.784 2 1.75 2Z" />
+													</svg>
+													No folder
+												</button>
+												{#each $folders.sort((a, b) => b.updated_at - a.updated_at) as folder}
+													<button
+														class="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 w-full text-left"
+														on:click={() => {
+															batchMoveChatsHandler(folder.id);
+															showFolderDropdown = false;
+														}}
+													>
+														<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+															<path d="M1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 13.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.784.784 2 1.75 2Z" />
+														</svg>
+														{folder.name}
+													</button>
+												{/each}
+											</div>
+										{/if}
+									</div>
+								{:else}
+									<button
+										class="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+										on:click={() => {
+											batchMoveChatsHandler(null);
+										}}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3.5">
+											<path d="M1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.784.784 2 1.75 2ZM1.5 12.251c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V4.25a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25v8.001Z" />
+											<path d="M8 4.5a.5.5 0 0 0-1 0v5.796L5.293 9.293a.5.5 0 1 0-.707.707l2.5 2.5a.5.5 0 0 0 .707 0l2.5-2.5a.5.5 0 0 0-.707-.707L8.5 10.296V4.5Z" />
+										</svg>
+										Move to...
+									</button>
+								{/if}
+								<button
+									class="flex items-center justify-center p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-500 dark:text-blue-400 transition"
+									on:click={clearSelection}
+									title="Clear selection"
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3.5">
+										<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708Z" />
+									</svg>
+								</button>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Select All checkbox for pinned section -->
+					{#if $pinnedChats.length > 0}
+						<div class="flex items-center gap-2 px-2.5 py-1">
+							<button
+								class="flex items-center gap-1.5"
+								on:click={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									handleSelectAll();
+								}}
+							>
+								{#if $selectedChatIds.size === $pinnedChats.length && $pinnedChats.length > 0}
+									<div class="size-4 rounded bg-blue-500 flex items-center justify-center">
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3 text-white">
+											<path d="M12.736 3.97a.733.733 0 1 1 1.037 1.037l-4.5 4.5a.75.75 0 0 1-1.05.028l-2.5-2.5a.733.733 0 1 1 1.037-1.037l1.972 1.973 3.972-3.972Z" />
+										</svg>
+									</div>
+								{:else if $selectedChatIds.size > 0 && $selectedChatIds.size < $pinnedChats.length}
+									<div class="size-4 rounded bg-blue-500 flex items-center justify-center">
+										<div class="size-2 bg-white rounded-sm" />
+									</div>
+								{:else}
+									<div class="size-4 rounded border border-gray-300 dark:border-gray-600" />
+								{/if}
+							</button>
+							<span class="text-xs text-gray-500 dark:text-gray-400">Select all pinned</span>
+						</div>
+					{/if}
+
+					<!-- Select All checkbox for main chats section -->
+					{#if !$pinnedChats.length || $pinnedChats.length > 0}
+						<div class="flex items-center gap-2 px-2.5 py-1">
+							<button
+								class="flex items-center gap-1.5"
+								on:click={(e) => {
+									e.preventDefault();
+									e.stopPropagation();
+									handleSelectAll();
+								}}
+							>
+								{#if $selectedChatIds.size === ($pinnedChats.length + ($chats?.length ?? 0)) && $selectedChatIds.size > 0}
+									<div class="size-4 rounded bg-blue-500 flex items-center justify-center">
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-3 text-white">
+											<path d="M12.736 3.97a.733.733 0 1 1 1.037 1.037l-4.5 4.5a.75.75 0 0 1-1.05.028l-2.5-2.5a.733.733 0 1 1 1.037-1.037l1.972 1.973 3.972-3.972Z" />
+										</svg>
+									</div>
+								{:else if $selectedChatIds.size > 0}
+									<div class="size-4 rounded bg-blue-500 flex items-center justify-center">
+										<div class="size-2 bg-white rounded-sm" />
+									</div>
+								{:else}
+									<div class="size-4 rounded border border-gray-300 dark:border-gray-600" />
+								{/if}
+							</button>
+							<span class="text-xs text-gray-500 dark:text-gray-400">Select all</span>
+						</div>
+					{/if}
+
 					{#if $pinnedChats.length > 0}
 						<div class="mb-1">
 							<div class="flex flex-col space-y-1 rounded-xl">
@@ -1484,12 +1784,17 @@
 												updatedAt={chat.updated_at}
 												lastReadAt={chat.last_read_at}
 												{shiftKey}
-												selected={selectedChatId === chat.id}
 												on:select={() => {
 													selectedChatId = chat.id;
 												}}
 												on:unselect={() => {
 													selectedChatId = null;
+												}}
+												on:checkbox-change={(e) => {
+													handleCheckboxChange(e.detail.id);
+												}}
+												on:range-select={(e) => {
+													handleRangeSelect(e.detail.id);
 												}}
 												on:change={async () => {
 													initChatList();
@@ -1547,12 +1852,17 @@
 										updatedAt={chat.updated_at}
 										lastReadAt={chat.last_read_at}
 										{shiftKey}
-										selected={selectedChatId === chat.id}
 										on:select={() => {
 											selectedChatId = chat.id;
 										}}
 										on:unselect={() => {
 											selectedChatId = null;
+										}}
+										on:checkbox-change={(e) => {
+											handleCheckboxChange(e.detail.id);
+										}}
+										on:range-select={(e) => {
+											handleRangeSelect(e.detail.id);
 										}}
 										on:change={async () => {
 											initChatList();
@@ -1643,6 +1953,40 @@
 			</div>
 		</div>
 	</div>
+
+		<!-- Confirmation Dialogs -->
+		<DeleteConfirmDialog
+			bind:show={showDeleteConfirm}
+			title={$i18n.t('Delete {{COUNT}} chats?', { COUNT: $selectedChatIds.size })}
+			on:confirm={() => {
+				batchDeleteChatsHandler();
+			}}
+		>
+			<div class="text-sm text-gray-500">
+				{$i18n.t('This will permanently delete')} <span class="font-semibold">{{ COUNT }} chat(s)</span>. {$i18n.t('This action cannot be undone.')}
+			</div>
+		</DeleteConfirmDialog>
+
+		<DeleteConfirmDialog
+			bind:show={showArchiveConfirm}
+			title={$i18n.t('Archive {{COUNT}} chats?', { COUNT: $selectedChatIds.size })}
+			on:confirm={() => {
+				batchArchiveChatsHandler();
+			}}
+		>
+			<div class="text-sm text-gray-500">
+				{$i18n.t('This will archive')} <span class="font-semibold">{{ COUNT }} chat(s)</span>.
+			</div>
+		</DeleteConfirmDialog>
+
+		<FolderModal
+			bind:show={showMoveFolderModal}
+			parentId={selectedFolderForMove}
+			onSubmit={async (folder) => {
+				selectedFolderForMove = folder.id;
+				batchMoveChatsHandler();
+			}}
+		/>
 
 	{#if !$mobile}
 		<div

@@ -35,7 +35,8 @@
 		currentChatPage,
 		tags,
 		selectedFolder,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds
 	} from '$lib/stores';
 
 	import ChatMenu from './ChatMenu.svelte';
@@ -64,7 +65,11 @@
 	export let selected = false;
 	export let shiftKey = false;
 
+	export let checkboxSelected = false;
+
 	export let onDragEnd = () => {};
+
+	const checkboxDispatch = createEventDispatcher();
 
 	function formatTimeAgo(timestamp: number): string {
 		const now = Date.now();
@@ -88,6 +93,28 @@
 	let chat = null;
 
 	let mouseOver = false;
+
+	// Checkbox selection handlers
+	const onCheckboxClick = async (e: MouseEvent) => {
+		e.stopPropagation();
+		e.preventDefault();
+
+		// Toggle this chat in/out of selection
+		selectedChatIds.update((ids) => {
+			const next = new Set(ids);
+			if (next.has(id)) {
+				next.delete(id);
+			} else {
+				next.add(id);
+			}
+			return next;
+		});
+
+		// Dispatch event to parent for shift+range selection
+		checkboxDispatch('checkbox-change', { id });
+	};
+
+	let viewingAt: number | null = null;
 
 	// Local state: tracks the last updatedAt seen while the user was viewing
 	// this chat.  Survives prop refreshes from sidebar data re-fetches that
@@ -524,6 +551,29 @@
 			on:focus={(e) => {}}
 			draggable="false"
 		>
+			<!-- Checkbox for multi-select (appears on hover or when selection active) -->
+			<div
+				class="shrink-0 self-center pr-1.5 flex opacity-0 group-hover:opacity-100 transition-opacity"
+				style={$selectedChatIds.size > 0 ? 'opacity-100 !important' : ''}
+				on:click={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					onCheckboxClick(e);
+				}}
+				on:dblclick={(e) => {
+					e.stopPropagation();
+					e.preventDefault();
+				}}
+			>
+				{#if $selectedChatIds.has(id)}
+					<div class="size-4 rounded bg-blue-500 flex items-center justify-center">
+						<Check className="size-3" strokeWidth="2.5" />
+					</div>
+				{:else}
+					<div class="size-4 rounded border border-gray-300 dark:border-gray-600" />
+				{/if}
+			</div>
+
 			<!-- Loading spinner for active chat (left side) -->
 			{#if $activeChatIds.has(id)}
 				<div class="shrink-0 self-center pr-2">
@@ -547,8 +597,8 @@
 				</div>
 			</div>
 
-			<!-- Time ago indicator -->
-			{#if createdAt && !mouseOver}
+			<!-- Time ago indicator (hidden when checkbox is visible on hover) -->
+			{#if createdAt && !mouseOver && $selectedChatIds.size === 0}
 				<div class="shrink-0 self-center text-[10px] text-gray-400 dark:text-gray-500 pl-2">
 					{formatTimeAgo(createdAt)}
 				</div>

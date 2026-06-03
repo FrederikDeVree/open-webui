@@ -1576,3 +1576,82 @@ async def delete_tag_by_id_and_tag_name(
         return await Tags.get_tags_by_ids_and_user_id(tags, user.id, db=db)
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)
+
+
+# --- Batch Chat Operations ---
+
+
+class ChatBatchIdsRequest(BaseModel):
+    ids: list[str]
+
+
+class ChatBatchMoveRequest(BaseModel):
+    ids: list[str]
+    folder_id: Optional[str] = None
+
+
+@router.post('/batch/delete', response_model=bool)
+async def batch_delete_chats(
+    request: Request,
+    form_data: ChatBatchIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Delete multiple chats by IDs for the current user."""
+    deleted_count = 0
+    for id in form_data.ids:
+        chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+        if chat:
+            # Cancel any in-flight LLM tasks before deleting
+            await stop_item_tasks(request.app.state.redis, id)
+            tag_ids = chat.meta.get('tags', [])
+            await Chats.delete_orphan_tags_for_user(tag_ids, user.id, threshold=1, db=db)
+            result = await Chats.delete_chat_by_id_and_user_id(id, user.id, db=db)
+            if result:
+                deleted_count += 1
+    return deleted_count > 0
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    form_data: ChatBatchIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Archive multiple chats by IDs for the current user."""
+    archived_count = 0
+    for id in form_data.ids:
+        chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+        if chat:
+            old_archived = chat.archived
+            chat = await Chats.toggle_chat_archive_by_id(id, db=db)
+            if chat and chat.archived != old_archived:
+                archived_count += 1
+    return archived_count > 0
+
+
+@router.post('/batch/move', response_model=bool)
+async def batch_move_chats(
+    form_data: ChatBatchMoveRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Move multiple chats to a folder by IDs for the current user."""
+    moved_count = 0
+    folder_id = form_data.folder_id
+    # Validate folder ownership if a folder_id is provided
+    if folder_id is not None:
+        if not await Folders.get_folder_by_id_and_user_id(folder_id, user.id, db=db):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=ERROR_MESSAGES.NOT_FOUND,
+            )
+    for id in form_data.ids:
+        chat = await Chats.get_chat_by_id_and_user_id(id, user.id, db=db)
+        if chat:
+            result = await Chats.update_chat_folder_id_by_id_and_user_id(
+                id, user.id, folder_id, db=db
+            )
+            if result:
+                moved_count += 1
+    return moved_count > 0

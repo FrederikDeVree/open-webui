@@ -34,6 +34,10 @@ export const activeUserIds: Writable<null | string[]> = writable(null);
 export const activeChatIds: Writable<Set<string>> = writable(new Set());
 export const USAGE_POOL: Writable<null | string[]> = writable(null);
 
+// Chat selection stores for multi-select batch operations
+export const selectedChatIds: Writable<Set<string>> = writable(new Set());
+export const lastSelectedChatId: Writable<string | null> = writable(null);
+
 export const theme = writable('system');
 
 export const shortCodesToEmojis = writable(
