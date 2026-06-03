@@ -51,6 +51,12 @@
 	$: codeInterpreterCount = tokens.filter((t) => t?.attributes?.type === 'code_interpreter').length;
 	$: diagramRendererCount = tokens.filter((t) => t?.attributes?.type === 'diagram_renderer').length;
 
+	// Auto-open when a diagram finishes rendering so the SVG is immediately visible
+	$: hasCompletedDiagram = tokens.some(
+		(t) => t?.attributes?.type === 'diagram_renderer' && t?.attributes?.done === 'true'
+	);
+	$: if (hasCompletedDiagram) open = true;
+
 	// Collect all embeds from tool_calls tokens
 	$: allEmbeds = (() => {
 		if (!allowEmbeds) return [];
