@@ -65,6 +65,9 @@ export const tags = writable([]);
 export const folders = writable([]);
 
 export const selectedFolder = writable(null);
+export const selectedChatIds = writable<Set<string>>(new Set());
+export let selectedFolderIdx = -1;
+export let selectedChatIdx = -1;
 
 export const models: Writable<Model[]> = writable([]);
 

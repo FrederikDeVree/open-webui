@@ -8,7 +8,6 @@
 	export let folderRegistry = {};
 
 	export let folders = {};
-	export let shiftKey = false;
 
 	export let onDelete = (folderId) => {};
 
@@ -46,7 +45,6 @@
 		bind:folderRegistry
 		{folders}
 		{folderId}
-		{shiftKey}
 		{onDelete}
 		{onItemMove}
 		on:import={(e) => {

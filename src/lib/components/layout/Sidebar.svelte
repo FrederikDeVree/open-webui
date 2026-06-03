@@ -30,6 +30,8 @@
 		WEBUI_NAME,
 		sidebarWidth,
 		activeChatIds
+
+	selectedChatIds
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -44,7 +46,10 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
+		batchDeleteChats,
+		batchArchiveChats,
+		batchMoveChats
 	} from '$lib/apis/chats';
 	import { createNewFolder, getFolders, updateFolderParentIdById } from '$lib/apis/folders';
 	import { createNewNote, getPinnedNoteList, toggleNotePinnedStatusById } from '$lib/apis/notes';
@@ -72,6 +77,11 @@
 	import PinnedModelList from './Sidebar/PinnedModelList.svelte';
 	import Note from '../icons/Note.svelte';
 	import Code from '../icons/Code.svelte';
+
+import ArchiveBox from '../icons/ArchiveBox.svelte';
+import GarbageBin from '../icons/GarbageBin.svelte';
+import XMark from '../icons/XMark.svelte';
+import Folder from '../icons/Folder.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
 
@@ -81,7 +91,9 @@
 	let scrollTop = 0;
 
 	let navElement;
-	let shiftKey = false;
+	// Multi-select batch action state
+let showMoveModal = false;
+let moveModalFolderId = null;
 
 	let selectedChatId = null;
 	let showCreateChannel = false;
@@ -451,22 +463,9 @@
 		checkDirection();
 	};
 
-	const onKeyDown = (e) => {
-		if (e.key === 'Shift') {
-			shiftKey = true;
-		}
-	};
-
-	const onKeyUp = (e) => {
-		if (e.key === 'Shift') {
-			shiftKey = false;
-		}
-	};
-
 	const onFocus = () => {};
 
 	const onBlur = () => {
-		shiftKey = false;
 		selectedChatId = null;
 	};
 
@@ -677,6 +676,56 @@
 	const isWindows = /Windows/i.test(navigator.userAgent);
 </script>
 
+
+// Multi-select handlers
+const clearSelection = () => {
+	selectedChatIds.set(new Set());
+};
+
+let showDeleteConfirm = false;
+
+const batchDeleteHandler = async () => {
+	const chatIds = Array.from($selectedChatIds);
+	if (chatIds.length === 0) return;
+
+	try {
+		await batchDeleteChats(localStorage.token, chatIds);
+		toast.success($i18n.t('Chats deleted successfully.'));
+		clearSelection();
+		await initChatList();
+	} catch (error) {
+		toast.error(`${error}`);
+	}
+};
+
+const batchArchiveHandler = async () => {
+	const chatIds = Array.from($selectedChatIds);
+	if (chatIds.length === 0) return;
+
+	try {
+		await batchArchiveChats(localStorage.token, chatIds);
+		toast.success($i18n.t('Chats archived successfully.'));
+		clearSelection();
+		await initChatList();
+	} catch (error) {
+		toast.error(`${error}`);
+	}
+};
+
+const batchMoveHandler = async (folderId: string | null) => {
+	const chatIds = Array.from($selectedChatIds);
+	if (chatIds.length === 0) return;
+
+	try {
+		await batchMoveChats(localStorage.token, chatIds, folderId);
+		toast.success($i18n.t('Chats moved successfully.'));
+		clearSelection();
+		await initChatList();
+	} catch (error) {
+		toast.error(`${error}`);
+	}
+};
+
 <ArchivedChatsModal
 	bind:show={$showArchivedChats}
 	onUpdate={async () => {
@@ -737,6 +786,56 @@
 		showCreateFolderModal = false;
 	}}
 />
+
+
+<!-- Batch move to folder modal -->
+{#if showMoveModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+		<div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-[400px] max-w-[90vw] border border-gray-200 dark:border-gray-700">
+			<div class="p-5">
+				<h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+					{$i18n.t('Move chats to folder')}
+				</h3>
+
+				<!-- Folder list -->
+				<div class="max-h-64 overflow-y-auto scrollbar-hidden space-y-1 mb-4">
+					{#each $folders.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0)) as folder}
+						<button
+							class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-800 text-left transition"
+							on:click={() => { batchMoveHandler(folder.id); showMoveModal = false; }}
+						>
+							<Folder className="size-4 text-gray-500 dark:text-gray-400" strokeWidth="1.5" />
+							<span class="truncate">{folder.name || $i18n.t('Folder')}</span>
+						</button>
+					{/each}
+					{#if $folders.length === 0}
+						<div class="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+							{$i18n.t('No folders available')}
+						</div>
+					{/if}
+				</div>
+
+				<div class="flex items-center gap-3">
+					<button
+						class="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+						on:click={() => {
+							batchMoveHandler(null);
+							showMoveModal = false;
+						}}
+					>
+						{$i18n.t('Remove from folder')}
+					</button>
+					<button
+						class="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+						on:click={() => { showMoveModal = false; }}
+					>
+						{$i18n.t('Cancel')}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 
@@ -1184,6 +1283,53 @@
 							{/if}
 						{/each}
 					</div>
+
+
+<!-- Batch action bar for multi-select -->
+{#if $selectedChatIds.size > 0}
+	<div
+		class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200 mb-1"
+	>
+		<div
+			class="w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800"
+		>
+			<div class="flex items-center gap-2">
+				<button
+					class="p-1 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900 transition"
+					on:click={() => { selectedChatIds.set(new Set()); }}
+				>
+					<XMark className="size-4 text-blue-600 dark:text-blue-400" strokeWidth="2" />
+				</button>
+				<span class="text-sm font-medium text-blue-800 dark:text-blue-300">
+					{$i18n.t('{{COUNT}} selected', { COUNT: $selectedChatIds.size })}
+				</span>
+			</div>
+			<div class="flex items-center gap-1">
+				<button
+					class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+					on:click={() => { batchArchiveHandler(); }}
+				>
+					<ArchiveBox className="size-4" strokeWidth="1.5" />
+					{$i18n.t('Archive')}
+				</button>
+				<button
+					class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+					on:click={() => { showMoveModal = true; }}
+				>
+					<Folder className="size-4" strokeWidth="1.5" />
+					{$i18n.t('Move')}
+				</button>
+				<button
+					class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/50 transition text-red-700 dark:text-red-400"
+					on:click={() => { batchDeleteHandler(); }}
+				>
+					<GarbageBin className="size-4" strokeWidth="1.5" />
+					{$i18n.t('Delete')}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 				</div>
 
 				{#if ($models ?? []).length > 0 && (($settings?.pinnedModels ?? []).length > 0 || $config?.default_pinned_models)}
@@ -1195,7 +1341,7 @@
 						chevron={false}
 						dragAndDrop={false}
 					>
-						<PinnedModelList bind:selectedChatId {shiftKey} />
+						<PinnedModelList bind:selectedChatId />
 					</Folder>
 				{/if}
 
@@ -1333,7 +1479,6 @@
 						<Folders
 							bind:folderRegistry
 							{folders}
-							{shiftKey}
 							onDelete={(folderId) => {
 								selectedFolder.set(null);
 								initChatList();
@@ -1483,7 +1628,6 @@
 												createdAt={chat.created_at}
 												updatedAt={chat.updated_at}
 												lastReadAt={chat.last_read_at}
-												{shiftKey}
 												selected={selectedChatId === chat.id}
 												on:select={() => {
 													selectedChatId = chat.id;
@@ -1546,7 +1690,6 @@
 										createdAt={chat.created_at}
 										updatedAt={chat.updated_at}
 										lastReadAt={chat.last_read_at}
-										{shiftKey}
 										selected={selectedChatId === chat.id}
 										on:select={() => {
 											selectedChatId = chat.id;

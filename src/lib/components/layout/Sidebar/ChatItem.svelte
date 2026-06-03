@@ -1,5 +1,5 @@
 <script context="module" lang="ts">
-	/** Shared 1×1 transparent drag preview; avoids one Image per sidebar row */
+	/** Shared 1x1 transparent drag preview; avoids one Image per sidebar row */
 	const invisibleDragImage = new Image();
 	invisibleDragImage.src =
 		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
@@ -31,6 +31,7 @@
 		chats,
 		mobile,
 		pinnedChats,
+		selectedChatIds,
 		showSidebar,
 		currentChatPage,
 		tags,
@@ -46,6 +47,7 @@
 	import ArchiveBox from '$lib/components/icons/ArchiveBox.svelte';
 	import DragGhost from '$lib/components/common/DragGhost.svelte';
 	import Check from '$lib/components/icons/Check.svelte';
+	import CheckBox from '$lib/components/icons/CheckBox.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
 	import Document from '$lib/components/icons/Document.svelte';
 	import Sparkles from '$lib/components/icons/Sparkles.svelte';
@@ -62,7 +64,6 @@
 	export let lastReadAt: number | null = null;
 
 	export let selected = false;
-	export let shiftKey = false;
 
 	export let onDragEnd = () => {};
 
@@ -240,8 +241,115 @@
 	let doubleClicked = false;
 
 	let dragged = false;
+
+	let draggable = false;
 	let x = 0;
 	let y = 0;
+
+	// Multi-select state
+	let isChecked = false;
+	let showCheckbox = false;
+
+	$: isChecked = $selectedChatIds.has(id);
+	$: showCheckbox = $selectedChatIds.size > 0;
+
+	// Build a stable list of all chat IDs in the sidebar for range selection
+	$: allChatIds = Array.from(document.querySelectorAll('[data-chat-id]')).map(
+		(el) => el.getAttribute('data-chat-id')
+	);
+
+	const handleCheckboxClick = (e: MouseEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+
+		const selected = new Set($selectedChatIds);
+
+		if (e.shiftKey && selected.size > 0 && allChatIds.length > 0) {
+			// Range select from last selected to current
+			const lastSelectedIdx = [...selected].reduce((maxIdx, selectedId) => {
+				const idx = allChatIds.indexOf(selectedId);
+				return idx > maxIdx ? idx : maxIdx;
+			}, -1);
+
+			const currentIdx = allChatIds.indexOf(id);
+
+			if (lastSelectedIdx !== -1 && currentIdx !== -1) {
+				const start = Math.min(lastSelectedIdx, currentIdx);
+				const end = Math.max(lastSelectedIdx, currentIdx);
+				for (let i = start; i <= end; i++) {
+					if (allChatIds[i]) selected.add(allChatIds[i]);
+				}
+			}
+		} else if (e.ctrlKey || e.metaKey) {
+			// Ctrl/Cmd click: toggle only this item
+			if (selected.has(id)) {
+				selected.delete(id);
+			} else {
+				selected.add(id);
+			}
+		} else {
+			// Regular checkbox click: toggle this item
+			if (selected.has(id)) {
+				selected.delete(id);
+			} else {
+				selected.add(id);
+			}
+		}
+
+		selectedChatIds.set(selected);
+	};
+
+	const handleRowClick = (e: MouseEvent) => {
+		e.stopPropagation();
+
+		const selected = $selectedChatIds;
+		const hasSelection = selected.size > 0;
+
+		// If there's a selection, handle multi-select behavior
+		if (hasSelection) {
+			if (e.shiftKey && allChatIds.length > 0) {
+				// Shift-click: range select
+				const lastSelectedIdx = [...selected].reduce((maxIdx, selectedId) => {
+					const idx = allChatIds.indexOf(selectedId);
+					return idx > maxIdx ? idx : maxIdx;
+				}, -1);
+
+				const currentIdx = allChatIds.indexOf(id);
+
+				if (lastSelectedIdx !== -1 && currentIdx !== -1) {
+					const newSelected = new Set(selected);
+					const start = Math.min(lastSelectedIdx, currentIdx);
+					const end = Math.max(lastSelectedIdx, currentIdx);
+					for (let i = start; i <= end; i++) {
+						if (allChatIds[i]) newSelected.add(allChatIds[i]);
+					}
+					selectedChatIds.set(newSelected);
+					return;
+				}
+			}
+
+			// In multi-select mode, clicking the row selects/deselects the chat
+			const newSelected = new Set(selected);
+			if (newSelected.has(id)) {
+				newSelected.delete(id);
+			} else {
+				newSelected.add(id);
+			}
+			selectedChatIds.set(newSelected);
+			return;
+		}
+
+		// Default: navigate to the chat
+		dispatch('select');
+		if ($selectedFolder) {
+			selectedFolder.set(null);
+		}
+		if ($mobile) {
+			showSidebar.set(false);
+		}
+		unread = false;
+		lastReadAt = Date.now() / 1000;
+	};
 
 	const onDragStart = (event) => {
 		event.stopPropagation();
@@ -445,6 +553,7 @@
 	id="sidebar-chat-group"
 	bind:this={itemElement}
 	class=" w-full {className} relative group"
+	data-chat-id={id}
 	draggable={!confirmEdit}
 >
 	{#if confirmEdit}
@@ -493,21 +602,8 @@
 					? 'bg-gray-100 dark:bg-gray-950 selected'
 					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
 			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
-
-				if ($selectedFolder) {
-					selectedFolder.set(null);
-				}
-
-				if ($mobile) {
-					showSidebar.set(false);
-				}
-
-				// Optimistically mark as read in UI when clicked
-				unread = false;
-				lastReadAt = Date.now() / 1000;
-			}}
+			data-chat-id={id}
+			on:click={handleRowClick}
 			on:dblclick={async (e) => {
 				e.preventDefault();
 				e.stopPropagation();
@@ -531,6 +627,18 @@
 				</div>
 			{/if}
 
+			<!-- Checkbox for multi-select (shows when any item is selected) -->
+			{#if showCheckbox}
+				<button
+					type="button"
+					data-chat-id={id}
+					on:click={handleCheckboxClick}
+					class="shrink-0 self-center pr-1.5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+				>
+					<CheckBox className="size-4 {isChecked ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'}" />
+				</button>
+			{/if}
+
 			<div class="flex self-center flex-1 w-full min-w-0">
 				{#if unread}
 					<div class="shrink-0 self-center pr-2.5 flex transition-opacity duration-300">
@@ -547,7 +655,7 @@
 				</div>
 			</div>
 
-			<!-- Time ago indicator -->
+			<!-- Time ago indicator (hidden when hovering) -->
 			{#if createdAt && !mouseOver}
 				<div class="shrink-0 self-center text-[10px] text-gray-400 dark:text-gray-500 pl-2">
 					{formatTimeAgo(createdAt)}
@@ -556,7 +664,7 @@
 		</a>
 	{/if}
 
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
+	<!-- Right-side menu: three dots (always shown on hover) -->
 	<div
 		id="sidebar-chat-item-menu"
 		class="
@@ -594,34 +702,6 @@
 					</button>
 				</Tooltip>
 			</div>
-		{:else if shiftKey && mouseOver}
-			<div class=" flex items-center self-center space-x-1.5">
-				<Tooltip content={$i18n.t('Archive')} className="flex items-center">
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={archiving}
-						on:click={() => {
-							archiveChatHandler(id);
-						}}
-						type="button"
-					>
-						<ArchiveBox className="size-4  translate-y-[0.5px]" strokeWidth="2" />
-					</button>
-				</Tooltip>
-
-				<Tooltip content={$i18n.t('Delete')}>
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={deleting}
-						on:click={() => {
-							deleteChatHandler(id);
-						}}
-						type="button"
-					>
-						<GarbageBin strokeWidth="2" />
-					</button>
-				</Tooltip>
-			</div>
 		{:else}
 			<div class="flex self-center z-10 items-end">
 				<ChatMenu
@@ -650,7 +730,12 @@
 					<button
 						aria-label="Chat Menu"
 						class=" self-center dark:hover:text-white transition m-0"
-						on:click={() => {
+						on:click={(e) => {
+							e.stopPropagation();
+							// If multi-select mode is active, clicking the menu doesn't navigate
+							if ($selectedChatIds.size > 0) {
+								return;
+							}
 							dispatch('select');
 						}}
 					>

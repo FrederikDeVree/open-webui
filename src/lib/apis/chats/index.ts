@@ -1239,6 +1239,97 @@ export const deleteAllChats = async (token: string) => {
 	return res;
 };
 
+// Batch operations for multi-select
+export const batchDeleteChats = async (token: string, chatIds: string[]) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/batch/delete`, {
+		method: 'DELETE',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({ chat_ids: chatIds })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			
+			console.error(err);
+			return null;
+		});
+	
+	if (error) {
+		throw error;
+	}
+	
+	return res;
+};
+
+export const batchArchiveChats = async (token: string, chatIds: string[]) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/batch/archive`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({ chat_ids: chatIds })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			
+			console.error(err);
+			return null;
+		});
+	
+	if (error) {
+		throw error;
+	}
+	
+	return res;
+};
+
+export const batchMoveChats = async (token: string, chatIds: string[], folderId: string | null) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/chats/batch/folder`, {
+		method: 'POST',
+		headers: {
+			Accept: 'application/json',
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		body: JSON.stringify({ chat_ids: chatIds, folder_id: folderId })
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			error = err.detail;
+			
+			console.error(err);
+			return null;
+		});
+	
+	if (error) {
+		throw error;
+	}
+	
+	return res;
+};
+
 export const archiveAllChats = async (token: string) => {
 	let error = null;
 

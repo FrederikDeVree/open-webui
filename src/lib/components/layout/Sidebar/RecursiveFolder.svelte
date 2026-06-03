@@ -49,7 +49,6 @@
 
 	export let folders;
 	export let folderId;
-	export let shiftKey = false;
 
 	export let className = '';
 
@@ -660,7 +659,6 @@
 								bind:folderRegistry
 								{folders}
 								folderId={childFolder.id}
-								{shiftKey}
 								parentDragged={dragged}
 								{onItemMove}
 								{onDelete}
@@ -684,7 +682,6 @@
 							createdAt={chat.created_at}
 							updatedAt={chat.updated_at}
 							lastReadAt={chat.last_read_at}
-							{shiftKey}
 							on:change={(e) => {
 								dispatch('change', e.detail);
 							}}

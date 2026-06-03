@@ -1576,3 +1576,113 @@ async def delete_tag_by_id_and_tag_name(
         return await Tags.get_tags_by_ids_and_user_id(tags, user.id, db=db)
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)
+
+
+############################
+# Batch Operations
+############################
+
+
+class BatchChatIdsForm(BaseModel):
+    chat_ids: list[str]
+
+
+@router.delete('/batch/delete', response_model=bool)
+async def batch_delete_chats(
+    request: Request,
+    form_data: BatchChatIdsForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    chat_ids = []
+    if user.role == 'admin':
+        chats = await Chats.get_chats_by_ids(form_data.chat_ids, db=db)
+        chat_ids = [c.id for c in chats if c]
+    else:
+        if not await has_permission(user.id, 'chat.delete', request.app.state.config.USER_PERMISSIONS):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
+            )
+
+        for cid in form_data.chat_ids:
+            chat = await Chats.get_chat_by_id_and_user_id(cid, user.id, db=db)
+            if chat:
+                chat_ids.append(cid)
+
+    # Cancel any in-flight LLM tasks before deleting
+    for cid in chat_ids:
+        await stop_item_tasks(request.app.state.redis, cid)
+
+    result = await Chats.batch_delete_chats_by_ids(chat_ids, user.id, db=db)
+    return result
+
+
+class BatchArchiveForm(BaseModel):
+    chat_ids: list[str]
+
+
+@router.post('/batch/archive', response_model=bool)
+async def batch_archive_chats(
+    request: Request,
+    form_data: BatchArchiveForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    chats = await Chats.get_chats_by_id_and_user_ids(form_data.chat_ids, user.id, db=db)
+    if not chats:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_MESSAGES.NOT_FOUND,
+        )
+
+    # Archive each chat
+    for chat in chats:
+        chat_id = chat.id
+        # Cancel in-flight tasks before archiving
+        await stop_item_tasks(request.app.state.redis, chat_id)
+
+        # Toggle archive (sets archived=True)
+        archived_chat = await Chats.toggle_chat_archive_by_id(chat_id, db=db)
+
+        tag_ids = archived_chat.meta.get('tags', [])
+        if archived_chat.archived:
+            # Archived chats are excluded from count — clean up orphans
+            await Chats.delete_orphan_tags_for_user(tag_ids, user.id, db=db)
+
+    return True
+
+
+class BatchMoveForm(BaseModel):
+    chat_ids: list[str]
+    folder_id: str | None = None
+
+
+@router.post('/batch/folder', response_model=bool)
+async def batch_move_chats(
+    request: Request,
+    form_data: BatchMoveForm,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if form_data.folder_id is not None:
+        if not await Folders.get_folder_by_id_and_user_id(form_data.folder_id, user.id, db=db):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=ERROR_MESSAGES.NOT_FOUND,
+            )
+
+    chats = await Chats.get_chats_by_id_and_user_ids(form_data.chat_ids, user.id, db=db)
+    if not chats:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_MESSAGES.NOT_FOUND,
+        )
+
+    # Move each chat
+    for chat in chats:
+        await Chats.update_chat_folder_id_by_id_and_user_id(
+            chat.id, user.id, form_data.folder_id, db=db
+        )
+
+    return True

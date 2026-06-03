@@ -1564,6 +1564,67 @@ class ChatTable:
         except Exception:
             return False
 
+    async def batch_delete_chats_by_ids(self, chat_ids: list[str], user_id: str, db: AsyncSession | None = None) -> bool:
+        """Delete multiple chats by their IDs (filtered by user_id).
+
+        Returns True if at least one chat was deleted, False otherwise.
+        """
+        try:
+            async with get_async_db_context(db) as session:
+                # Bulk delete chat messages
+                await session.execute(delete(ChatMessage).filter(
+                    ChatMessage.chat_id.in_(chat_ids)
+                ))
+                # Bulk delete automation runs
+                await session.execute(delete(AutomationRun).filter(
+                    AutomationRun.chat_id.in_(chat_ids)
+                ))
+                # Bulk delete chats for this user
+                result = await session.execute(delete(Chat).filter(
+                    Chat.id.in_(chat_ids),
+                    Chat.user_id == user_id
+                ))
+                await session.commit()
+
+                deleted_count = result.rowcount if hasattr(result, 'rowcount') else len(chat_ids)
+                return deleted_count > 0
+        except Exception:
+            return False
+
+    async def get_chats_by_ids(self, chat_ids: list[str], db: AsyncSession | None = None) -> list[Chat | None]:
+        """Get multiple chats by their IDs (admin access - no user filter)."""
+        async with get_async_db_context(db) as session:
+            chats = await session.execute(
+                select(Chat).where(Chat.id.in_(chat_ids))
+            )
+            return list(chats.scalars().all())
+
+    async def get_chats_by_id_and_user_ids(
+        self, chat_ids: list[str], user_id: str, db: AsyncSession | None = None
+    ) -> list[Chat | None]:
+        """Get chats by IDs, filtered by user_id."""
+        async with get_async_db_context(db) as session:
+            chats = await session.execute(
+                select(Chat).where(
+                    Chat.id.in_(chat_ids),
+                    Chat.user_id == user_id,
+                )
+            )
+            return list(chats.scalars().all())
+
+    async def update_chat_folder_id_by_id_and_user_id(
+        self, id: str, user_id: str, folder_id: str | None, db: AsyncSession | None = None
+    ) -> Chat | None:
+        """Update the folder_id of a chat, filtered by user_id."""
+        chat = await self.get_chat_by_id_and_user_id(id, user_id, db=db)
+        if not chat:
+            return None
+        async with get_async_db_context(db) as session:
+            chat.folder_id = folder_id
+            session.add(chat)
+            await session.commit()
+            await session.refresh(chat)
+        return chat
     async def delete_chats_by_user_id(self, user_id: str, db: AsyncSession | None = None) -> bool:
         try:
             async with get_async_db_context(db) as session:
