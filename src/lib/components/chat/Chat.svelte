@@ -131,7 +131,6 @@
 	let autoScroll = true;
 	$: scrollDuringGeneration = $settings?.scrollDuringGeneration ?? true;
 	let isNearTop = true;
-	$: scrollDuringGeneration = $settings?.scrollDuringGeneration ?? true;
 	let processing = '';
 	let messagesContainerElement: HTMLDivElement;
 
