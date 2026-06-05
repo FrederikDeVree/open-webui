@@ -53,20 +53,55 @@ open-webui/
 
 ## COMMANDS
 
+### Install
+
 | Action           | Command |
 |------------------|---------|
 | Install deps (FE) | `npm install` |
-| Install deps (BE) | `pip install -e "backend[all]"` or use `uv pip install -e ".[dev]"` |
-| Dev server (FE)  | `npm run dev` (or `npm run dev:5050` for port 5050) |
-| Dev server (BE)  | `cd backend && ./dev.sh` (runs `uvicorn --reload`) |
-| Build            | `npm run build` |
-| Preview          | `npm run preview` |
-| Type check       | `npm run check` (SvelteKit sync + svelte-check) |
-| Lint (all)       | `npm run lint` (frontend + types + backend) |
-| Format (FE)      | `npm run format` (Prettier) |
-| Format (BE)      | `npm run format:backend` (Ruff format) |
-| i18n extract     | `npm run i18n:parse` |
-| Frontend tests   | `npm run test:frontend` (Vitest) |
+| Install deps (BE) | `pip install -e "backend[all]"` or `uv pip install -e ".[dev]"` |
+
+### Development
+
+| Action           | Command | Notes |
+|------------------|---------|-------|
+| Dev server (FE)  | `npm run dev` | Port 5173; auto-runs `pyodide:fetch` first |
+| Dev server (FE, alt port) | `npm run dev:5050` | Port 5050 |
+| Dev server (BE)  | `cd backend && ./dev.sh` | `uvicorn --reload` on port 8080 |
+| Fetch Pyodide assets | `npm run pyodide:fetch` | Run by `dev`/`build` automatically via `scripts/prepare-pyodide.js` |
+
+### Build & Preview
+
+| Action           | Command | Notes |
+|------------------|---------|-------|
+| Build            | `npm run build` | Auto-runs `pyodide:fetch` first |
+| Build (watch)    | `npm run build:watch` | Incremental rebuild on file change |
+| Preview          | `npm run preview` | Serves the `build/` output locally |
+
+### Quality
+
+| Action           | Command | Notes |
+|------------------|---------|-------|
+| Type check       | `npm run check` | SvelteKit sync + svelte-check |
+| Type check (watch) | `npm run check:watch` | Re-checks on every save |
+| Lint (all)       | `npm run lint` | Runs `lint:frontend`, `lint:types`, `lint:backend` in sequence |
+| Lint frontend    | `npm run lint:frontend` | ESLint with auto-fix |
+| Lint types       | `npm run lint:types` | Alias for `check` |
+| Lint backend     | `npm run lint:backend` | Pylint on `backend/` |
+| Format (FE)      | `npm run format` | Prettier — JS/TS/Svelte/CSS/MD/HTML/JSON |
+| Format (BE)      | `npm run format:backend` | Ruff format (excludes `.venv`) |
+
+### Testing
+
+| Action           | Command | Notes |
+|------------------|---------|-------|
+| Frontend tests   | `npm run test:frontend` | Vitest (`--passWithNoTests`) |
+| E2E tests        | `npm run cy:open` | Cypress interactive runner |
+| i18n extract     | `npm run i18n:parse` | Extracts strings + Prettier-formats output |
+
+### Docker
+
+| Action           | Command |
+|------------------|---------|
 | Docker install   | `make install` (docker compose up -d) |
 | Docker run       | `make start` |
 | Docker build+run | `make startAndBuild` |
