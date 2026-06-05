@@ -8,7 +8,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { goto, invalidate, invalidateAll } from '$app/navigation';
-	import { onMount, getContext, createEventDispatcher, tick } from 'svelte';
+	import { onMount, getContext, createEventDispatcher, tick, writable, derived } from 'svelte';
 	const i18n = getContext('i18n');
 
 	const dispatch = createEventDispatcher();
@@ -23,7 +23,10 @@
 		getChatListByTagName,
 		getPinnedChatList,
 		updateChatById,
-		updateChatFolderIdById
+		updateChatFolderIdById,
+		deleteChatsByIds,
+		archiveChatsByIds,
+		moveChatsToFolderByIds
 	} from '$lib/apis/chats';
 	import {
 		chatId,
@@ -34,8 +37,10 @@
 		showSidebar,
 		currentChatPage,
 		tags,
+		ab3,
 		selectedFolder,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds
 	} from '$lib/stores';
 
 	import ChatMenu from './ChatMenu.svelte';
@@ -54,21 +59,19 @@
 	import { createMessagesList } from '$lib/utils';
 
 	export let className = '';
-
 	export let id;
 	export let title;
 	export let createdAt: number | null = null;
 	export let updatedAt: number | null = null;
 	export let lastReadAt: number | null = null;
-
 	export let selected = false;
+	export let checkboxSelected = false;
 	export let shiftKey = false;
-
-	export let onDragEnd = () => {};
+	export let onMouseDown = () => {};
 
 	function formatTimeAgo(timestamp: number): string {
 		const now = Date.now();
-		const diff = now - timestamp * 1000; // timestamp is in seconds
+		const diff = now - timestamp * 1000;
 
 		const seconds = Math.floor(diff / 1000);
 		const minutes = Math.floor(seconds / 60);
@@ -86,7 +89,6 @@
 	}
 
 	let chat = null;
-
 	let mouseOver = false;
 
 	// Local state: tracks the last updatedAt seen while the user was viewing
@@ -232,7 +234,30 @@
 		}
 	};
 
+	// Checkbox selection state
+	let checkboxMouseOver = false;
+
+	// Simple toggle for individual chat selection
+	const handleCheckboxClick = (e: MouseEvent) => {
+		// Shift+click: toggle current chat and let parent handle range selection
+		_selectedChatIds.update((set) => {
+			const newSet = new Set(set);
+			if (newSet.has(id)) {
+				newSet.delete(id);
+			} else {
+				newSet.add(id);
+			}
+			return newSet;
+		});
+
+		if (e.shiftKey) {
+			// Dispatch event for parent to handle range selection
+			dispatch('checkbox-shift-click', { chatId: id });
+		}
+	};
+
 	let itemElement;
+	let draggable = true;
 
 	let generating = false;
 
@@ -524,31 +549,65 @@
 			on:focus={(e) => {}}
 			draggable="false"
 		>
-			<!-- Loading spinner for active chat (left side) -->
-			{#if $activeChatIds.has(id)}
-				<div class="shrink-0 self-center pr-2">
-					<Spinner className="size-3" />
-				</div>
-			{/if}
-
-			<div class="flex self-center flex-1 w-full min-w-0">
-				{#if unread}
-					<div class="shrink-0 self-center pr-2.5 flex transition-opacity duration-300">
-						<div class="size-1.5 bg-sky-500 rounded-full" />
-					</div>
-				{/if}
-				<div
-					dir="auto"
-					class="text-left self-center overflow-hidden w-full h-[20px] truncate {unread
-						? 'font-medium text-gray-900 dark:text-gray-100'
-						: ''}"
+			<div class="flex items-center gap-2 w-full">
+				<!-- Checkbox (hover-visible or always visible in select mode) -->
+				<label
+					class="relative flex items-center shrink-0 cursor-pointer group/checkbox"
+					on:mouseenter={(e) => {
+						e?.stopPropagation();
+						checkboxMouseOver = true;
+					}}
+					on:mouseleave={(e) => {
+						checkboxMouseOver = false;
+					}}
+					on:click={(e) => {
+						e?.stopPropagation();
+						handleCheckboxClick(e);
+					}}
 				>
-					{title}
+					<!-- Unchecked/checked square -->
+					<div class="w-4 h-4 flex items-center justify-center">
+						{#if checkboxSelected || checkboxMouseOver || $selectedChatIds.size > 0}
+							{#if checkboxSelected}
+								<svg viewBox="0 0 24 24" class="w-4 h-4 fill-current text-gray-600 dark:text-gray-300">
+									<path d="M3 5.5L10 12L21 3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+							{:else}
+								<svg viewBox="0 0 24 24" class="w-4 h-4 fill-none stroke-gray-400 dark:stroke-gray-500" stroke-width="2">
+									<rect x="4" y="4" width="16" height="16" rx="2"/>
+								</svg>
+							{/if}
+						{/if}
+					</div>
+				</label>
+
+				<!-- Chat content -->
+				<div class="flex items-center flex-1 min-w-0">
+					<!-- Loading spinner for active chat (left side) -->
+					{#if $activeChatIds.has(id)}
+						<div class="shrink-0 self-center pr-2">
+							<Spinner className="size-3" />
+						</div>
+					{/if}
+
+					{#if unread}
+						<div class="shrink-0 self-center pr-2.5 flex transition-opacity duration-300">
+							<div class="size-1.5 bg-sky-500 rounded-full" />
+						</div>
+					{/if}
+					<div
+						dir="auto"
+						class="text-left self-center overflow-hidden w-full h-[20px] truncate {unread
+							? 'font-medium text-gray-900 dark:text-gray-100'
+							: ''}"
+					>
+						{title}
+					</div>
 				</div>
 			</div>
 
-			<!-- Time ago indicator -->
-			{#if createdAt && !mouseOver}
+			<!-- Time ago indicator (only when not hovering over checkbox) -->
+			{#if createdAt && !checkboxMouseOver}
 				<div class="shrink-0 self-center text-[10px] text-gray-400 dark:text-gray-500 pl-2">
 					{formatTimeAgo(createdAt)}
 				</div>
@@ -591,34 +650,6 @@
 						}}
 					>
 						<Sparkles strokeWidth="2" />
-					</button>
-				</Tooltip>
-			</div>
-		{:else if shiftKey && mouseOver}
-			<div class=" flex items-center self-center space-x-1.5">
-				<Tooltip content={$i18n.t('Archive')} className="flex items-center">
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={archiving}
-						on:click={() => {
-							archiveChatHandler(id);
-						}}
-						type="button"
-					>
-						<ArchiveBox className="size-4  translate-y-[0.5px]" strokeWidth="2" />
-					</button>
-				</Tooltip>
-
-				<Tooltip content={$i18n.t('Delete')}>
-					<button
-						class=" self-center dark:hover:text-white transition disabled:cursor-not-allowed"
-						disabled={deleting}
-						on:click={() => {
-							deleteChatHandler(id);
-						}}
-						type="button"
-					>
-						<GarbageBin strokeWidth="2" />
 					</button>
 				</Tooltip>
 			</div>

@@ -817,7 +817,55 @@ async def archive_all_chats(user=Depends(get_verified_user), db: AsyncSession = 
 
 @router.post('/unarchive/all', response_model=bool)
 async def unarchive_all_chats(user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
-    return await Chats.unarchive_all_chats_by_user_id(user.id, db=db)
+	pass
+
+############################
+# Batch Chat Operations
+############################
+
+
+class BatchChatIdsRequest(BaseModel):
+    ids: list[str]
+
+
+class BatchChatMoveRequest(BaseModel):
+    ids: list[str]
+    folder_id: str | None
+
+
+@router.post('/batch/archive', response_model=bool)
+async def archive_chats_by_ids(
+    request: BatchChatIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    for chat_id in request.ids:
+        chat = await Chats.get_chat_by_id_and_user_id(chat_id, user.id, db=db)
+        if chat:
+            await Chats.toggle_chat_archive_by_id(chat_id, db=db)
+    return True
+
+
+@router.delete('/batch/delete', response_model=bool)
+async def delete_chats_by_ids(
+    request: BatchChatIdsRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    for chat_id in request.ids:
+        await Chats.delete_chat_by_id_and_user_id(chat_id, user.id, db=db)
+    return True
+
+
+@router.post('/batch/move', response_model=bool)
+async def move_chats_by_ids(
+    request: BatchChatMoveRequest,
+    user=Depends(get_verified_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    for chat_id in request.ids:
+        await Chats.update_chat_folder_id_by_id(chat_id, request.folder_id, db=db)
+    return True
 
 
 ############################

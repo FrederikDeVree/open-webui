@@ -59,4 +59,7 @@
 			dispatch('change', e.detail);
 		}}
 	/>
+	on:checkbox-shift-click={(e) => {
+		dispatch('checkbox-shift-click', e.detail);
+	}}
 {/each}

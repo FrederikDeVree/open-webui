@@ -11,7 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 
-	import { chatId, mobile, selectedFolder, showSidebar } from '$lib/stores';
+	import { chatId, mobile, selectedFolder, showSidebar, selectedChatIds } from '$lib/stores';
 
 	import {
 		deleteFolderById,
@@ -680,11 +680,16 @@
 					{#each chats ?? [] as chat (chat.id)}
 						<ChatItem
 							id={chat.id}
+							data-chat-id={chat.id}
 							title={chat.title}
 							createdAt={chat.created_at}
 							updatedAt={chat.updated_at}
 							lastReadAt={chat.last_read_at}
 							{shiftKey}
+							checkboxSelected={$selectedChatIds.has(chat.id)}
+							on:checkbox-shift-click={(e) => {
+								dispatch('checkbox-shift-click', e.detail);
+							}}
 							on:change={(e) => {
 								dispatch('change', e.detail);
 							}}

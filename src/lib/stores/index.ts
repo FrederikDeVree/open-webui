@@ -65,6 +65,8 @@ export const tags = writable([]);
 export const folders = writable([]);
 
 export const selectedFolder = writable(null);
+// Multi-select checkbox state for chats in the sidebar
+export const selectedChatIds = writable<Set<string>>(new Set());
 
 export const models: Writable<Model[]> = writable([]);
 
