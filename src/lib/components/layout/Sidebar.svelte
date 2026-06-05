@@ -45,7 +45,7 @@
 		updateChatFolderIdById,
 		importChats,
 		deleteAllChats,
-		getChatListBySearchText
+		getChatListBySearchText,
 
 		deleteChatsByIds,
 		archiveChatsByIds,
