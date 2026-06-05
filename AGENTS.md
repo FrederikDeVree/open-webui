@@ -81,7 +81,7 @@ open-webui/
 
 | Action           | Command | Notes |
 |------------------|---------|-------|
-| Type check       | `npm run check` | SvelteKit sync + svelte-check |
+| Type check       | `npm run check` | SvelteKit sync + svelte-check (*WARNING*: Slow and big output, so write output to file and grep there) |
 | Type check (watch) | `npm run check:watch` | Re-checks on every save |
 | Lint (all)       | `npm run lint` | Runs `lint:frontend`, `lint:types`, `lint:backend` in sequence |
 | Lint frontend    | `npm run lint:frontend` | ESLint with auto-fix |
