@@ -387,7 +387,8 @@ def convert_output_to_messages(
                                 'type': 'text',
                                 'text': (
                                     'Here is a screenshot of the rendered diagram. '
-                                    'Inspect it visually. If it looks correct, continue without outputting a new diagram. '
+                                    'Inspect it visually. If it looks correct, continue without outputting a new diagram '
+                                    'and without any further comment on it.'
                                     'If there are visual issues (wrong layout, missing elements, unreadable text, etc.), '
                                     'output a corrected diagram in a new code block.'
                                 ),
