@@ -144,8 +144,6 @@
 
 	export let pendingOAuthTools = [];
 
-	let showTerminalMenu = false;
-
 	export let messageQueue: { id: string; prompt: string; files: any[] }[] = [];
 	export let onQueueSendNow: (id: string) => void = () => {};
 	export let onQueueEdit: (id: string) => void = () => {};
@@ -1985,7 +1983,7 @@
 												$_user?.role === 'admin' ||
 												($_user?.permissions?.features?.direct_tool_servers ?? true)}
 											{#if terminalCapableModels.length > 0 && (($terminalServers ?? []).some((t) => t.id) || (hasDirectToolServerAccess && (($terminalServers ?? []).some((t) => !t.id) || ($settings?.terminalServers ?? []).some((s) => s.url))))}
-												<TerminalMenu bind:show={showTerminalMenu} />
+												<TerminalMenu />
 											{/if}
 
 											{#if $_user?.role === 'admin' || ($_user?.permissions?.chat?.stt ?? true)}
