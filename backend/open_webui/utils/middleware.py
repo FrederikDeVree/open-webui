@@ -2207,13 +2207,13 @@ def get_reasoning_format(model: dict) -> str | None:
 
     Returns:
         'think_tags': Ollama expects <think> tags in content.
-        'reasoning_content': llama.cpp supports reasoning_content as a top-level field.
+        'reasoning_content': llama.cpp / vLLM supports reasoning_content as a top-level field.
         None: skip reasoning (safe default for strict providers).
     """
     provider = model.get('provider', '')
     if provider == 'ollama':
         return 'think_tags'
-    if provider == 'llama.cpp':
+    if provider in ('llama.cpp', 'vllm'):
         return 'reasoning_content'
     return None
 
@@ -2430,9 +2430,32 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         form_data['messages'].append({'role': 'user', 'content': regeneration_prompt})
 
     # Process messages with OR-aligned output items for clean LLM messages
+    reasoning_format = get_reasoning_format(model)
     form_data['messages'] = process_messages_with_output(
         form_data.get('messages', []),
-        reasoning_format=get_reasoning_format(model),
+        reasoning_format=reasoning_format,
+    )
+
+    # When reasoning_content is being sent back to a vLLM/llama.cpp backend,
+    # inject chat_template_kwargs: {enable_thinking: true} so the chat template
+    # re-inserts <think>…</think> tokens into the prompt prefix, which is
+    # required for vLLM prefix caching (KV cache) to hit on multi-turn.
+    if reasoning_format == 'reasoning_content':
+        has_reasoning = any(
+            msg.get('reasoning_content') for msg in form_data.get('messages', []) if msg.get('role') == 'assistant'
+        )
+        if has_reasoning:
+            existing = form_data.get('chat_template_kwargs') or {}
+            if 'enable_thinking' not in existing:
+                form_data['chat_template_kwargs'] = {**existing, 'enable_thinking': True}
+
+    log.debug(
+        'kv-cache: model=%s provider=%s reasoning_format=%s chat_template_kwargs=%s msg_roles=%s',
+        model.get('id'),
+        model.get('provider', ''),
+        reasoning_format,
+        form_data.get('chat_template_kwargs'),
+        [(m['role'], 'reasoning_content' in m) for m in form_data.get('messages', [])],
     )
 
     system_message = get_system_message(form_data.get('messages', []))
@@ -4473,11 +4496,14 @@ async def streaming_chat_response_handler(response, ctx):
                     await flush_pending_delta_data()
 
                     if output:
-                        # Clean up the last message item
+                        # Clean up the last message item — only strip trailing
+                        # whitespace so that any leading newline vLLM emits after
+                        # </think> is preserved, keeping the token sequence stable
+                        # for KV-cache prefix matching on subsequent turns.
                         if output[-1].get('type') == 'message':
                             parts = output[-1].get('content', [])
                             if parts and parts[-1].get('type') == 'output_text':
-                                parts[-1]['text'] = parts[-1]['text'].strip()
+                                parts[-1]['text'] = parts[-1]['text'].rstrip()
 
                                 if not parts[-1]['text']:
                                     output.pop()
