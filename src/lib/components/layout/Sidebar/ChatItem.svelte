@@ -35,7 +35,9 @@
 		currentChatPage,
 		tags,
 		selectedFolder,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds,
+		lastSelectedChatId
 	} from '$lib/stores';
 
 	import ChatMenu from './ChatMenu.svelte';
@@ -65,6 +67,57 @@
 	export let shiftKey = false;
 
 	export let onDragEnd = () => {};
+
+	// Multi-select state
+	let isChecked = $selectedChatIds.has(id);
+	let isHoverVisible = false;
+
+	$: isChecked = $selectedChatIds.has(id);
+	$: if (isChecked) {
+		lastSelectedChatId.set(id);
+	}
+
+	const toggleChatSelection = (event: MouseEvent) => {
+		event?.stopPropagation();
+		selectedChatIds.update((selected) => {
+			const newSet = new Set(selected);
+			if (newSet.has(id)) {
+				newSet.delete(id);
+			} else {
+				newSet.add(id);
+				lastSelectedChatId.set(id);
+			}
+			return newSet;
+		});
+	};
+
+	const handleChatClick = (event: MouseEvent) => {
+		if (event.shiftKey && $lastSelectedChatId !== null) {
+			// Range selection with shift
+			const allChats = [$pinnedChats, $chats].flat().filter((c: any) => c?.id);
+			const currentIndex = allChats.findIndex((c: any) => c.id === id);
+			const lastIndex = allChats.findIndex((c: any) => c.id === $lastSelectedChatId);
+
+			if (currentIndex !== -1 && lastIndex !== -1) {
+				const start = Math.min(currentIndex, lastIndex);
+				const end = Math.max(currentIndex, lastIndex);
+				const chatIdsInRange = allChats.slice(start, end + 1).map((c: any) => c.id);
+
+				selectedChatIds.update((selected) => {
+					const newSet = new Set(selected);
+					chatIdsInRange.forEach((chatId: string) => newSet.add(chatId));
+					return newSet;
+				});
+			}
+		} else if (event.ctrlKey || event.metaKey) {
+			// Toggle selection with ctrl/cmd
+			toggleChatSelection(event);
+		} else if ($selectedChatIds.size > 0) {
+			// If multi-select is active and clicking without modifiers, deselect all except this one
+			selectedChatIds.set(new Set([id]));
+			lastSelectedChatId.set(id);
+		}
+	};
 
 	function formatTimeAgo(timestamp: number): string {
 		const now = Date.now();
@@ -493,20 +546,31 @@
 					? 'bg-gray-100 dark:bg-gray-950 selected'
 					: ' group-hover:bg-gray-100 dark:group-hover:bg-gray-950'}  whitespace-nowrap text-ellipsis"
 			href="/c/{id}"
-			on:click={() => {
-				dispatch('select');
+			on:click={(e) => {
+				// Don't navigate if clicking the checkbox
+				if (e.target.closest('.chat-checkbox')) return;
+				
+				// Don't navigate if clicking the menu
+				if (e.target.closest('#sidebar-chat-item-menu')) return;
+				
+				handleChatClick(e);
+				
+				// Only navigate if not in multi-select mode
+				if ($selectedChatIds.size === 0) {
+					dispatch('select');
 
-				if ($selectedFolder) {
-					selectedFolder.set(null);
+					if ($selectedFolder) {
+						selectedFolder.set(null);
+					}
+
+					if ($mobile) {
+						showSidebar.set(false);
+					}
+
+					// Optimistically mark as read in UI when clicked
+					unread = false;
+					lastReadAt = Date.now() / 1000;
 				}
-
-				if ($mobile) {
-					showSidebar.set(false);
-				}
-
-				// Optimistically mark as read in UI when clicked
-				unread = false;
-				lastReadAt = Date.now() / 1000;
 			}}
 			on:dblclick={async (e) => {
 				e.preventDefault();
@@ -524,6 +588,21 @@
 			on:focus={(e) => {}}
 			draggable="false"
 		>
+			<!-- Multi-select checkbox -->
+			<div class="shrink-0 self-center pr-1.5 opacity-0 group-hover:opacity-100 transition-opacity {isChecked || $selectedChatIds.size > 0 ? 'opacity-100' : ''}">
+				<input
+					type="checkbox"
+					class="chat-checkbox w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400 cursor-pointer"
+					checked={isChecked}
+					disabled={confirmEdit}
+					on:change={(e) => {
+						e.stopPropagation();
+						toggleChatSelection(e);
+					}}
+					on:click={(e) => e.stopPropagation()}
+				/>
+			</div>
+
 			<!-- Loading spinner for active chat (left side) -->
 			{#if $activeChatIds.has(id)}
 				<div class="shrink-0 self-center pr-2">

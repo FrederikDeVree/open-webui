@@ -29,7 +29,9 @@
 		selectedFolder,
 		WEBUI_NAME,
 		sidebarWidth,
-		activeChatIds
+		activeChatIds,
+		selectedChatIds,
+		lastSelectedChatId
 	} from '$lib/stores';
 	import { onMount, getContext, tick, onDestroy } from 'svelte';
 
@@ -74,6 +76,7 @@
 	import Code from '../icons/Code.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
+	import FolderIcon from '../icons/Folder.svelte';
 
 	const BREAKPOINT = 768;
 	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
@@ -391,7 +394,126 @@
 		}
 	};
 
-	let draggedOver = false;
+	// Bulk action state
+	let showMoveToFolderModal = false;
+	let selectedFolderForMove = null;
+	let isBulkDeleting = false;
+	let isBulkArchiving = false;
+
+	const bulkDeleteChats = async () => {
+		if (isBulkDeleting) return;
+		isBulkDeleting = true;
+
+		const chatIdsToDelete = Array.from($selectedChatIds);
+		let successCount = 0;
+		let errorCount = 0;
+
+		for (const chatId of chatIdsToDelete) {
+			try {
+				const res = await deleteChatById(localStorage.token, chatId);
+				if (res) {
+					successCount++;
+				} else {
+					errorCount++;
+				}
+			} catch (error) {
+				console.error(`Failed to delete chat ${chatId}:`, error);
+				errorCount++;
+			}
+		}
+
+		if (successCount > 0) {
+			tags.set(await getAllTags(localStorage.token));
+			toast.success($i18n.t('Deleted {{COUNT}} chat(s)', { COUNT: successCount }));
+		}
+
+		if (errorCount > 0) {
+			toast.error($i18n.t('Failed to delete {{COUNT}} chat(s)', { COUNT: errorCount }));
+		}
+
+		// Clear selection and refresh
+		selectedChatIds.set(new Set());
+		lastSelectedChatId.set(null);
+		await initChatList();
+		isBulkDeleting = false;
+	};
+
+	const bulkArchiveChats = async () => {
+		if (isBulkArchiving) return;
+		isBulkArchiving = true;
+
+		const chatIdsToArchive = Array.from($selectedChatIds);
+		let successCount = 0;
+		let errorCount = 0;
+
+		for (const chatId of chatIdsToArchive) {
+			try {
+				const res = await archiveChatById(localStorage.token, chatId);
+				if (res) {
+					successCount++;
+				} else {
+					errorCount++;
+				}
+			} catch (error) {
+				console.error(`Failed to archive chat ${chatId}:`, error);
+				errorCount++;
+			}
+		}
+
+		if (successCount > 0) {
+			toast.success($i18n.t('Archived {{COUNT}} chat(s)', { COUNT: successCount }));
+		}
+
+		if (errorCount > 0) {
+			toast.error($i18n.t('Failed to archive {{COUNT}} chat(s)', { COUNT: errorCount }));
+		}
+
+		// Clear selection and refresh
+		selectedChatIds.set(new Set());
+		lastSelectedChatId.set(null);
+		await initChatList();
+		isBulkArchiving = false;
+	};
+
+	const bulkMoveChats = async (folderId: string | null) => {
+		if (!folderId) {
+			toast.error($i18n.t('Please select a folder'));
+			return;
+		}
+
+		const chatIdsToMove = Array.from($selectedChatIds);
+		let successCount = 0;
+		let errorCount = 0;
+
+		for (const chatId of chatIdsToMove) {
+			try {
+				const res = await updateChatFolderIdById(localStorage.token, chatId, folderId);
+				if (res) {
+					successCount++;
+				} else {
+					errorCount++;
+				}
+			} catch (error) {
+				console.error(`Failed to move chat ${chatId}:`, error);
+				errorCount++;
+			}
+		}
+
+		if (successCount > 0) {
+			toast.success($i18n.t('Moved {{COUNT}} chat(s) to folder', { COUNT: successCount }));
+		}
+
+		if (errorCount > 0) {
+			toast.error($i18n.t('Failed to move {{COUNT}} chat(s)', { COUNT: errorCount }));
+		}
+
+		// Clear selection and refresh
+		selectedChatIds.set(new Set());
+		lastSelectedChatId.set(null);
+		await initChatList();
+		showMoveToFolderModal = false;
+		selectedFolderForMove = null;
+	};
 
 	const onDragOver = (e) => {
 		e.preventDefault();
@@ -452,13 +574,14 @@
 	};
 
 	const onKeyDown = (e) => {
-		if (e.key === 'Shift') {
+		// Disable shift-key navigation when multi-select is active
+		if (e.key === 'Shift' && $selectedChatIds.size === 0) {
 			shiftKey = true;
 		}
 	};
 
 	const onKeyUp = (e) => {
-		if (e.key === 'Shift') {
+		if (e.key === 'Shift' && $selectedChatIds.size === 0) {
 			shiftKey = false;
 		}
 	};
@@ -737,6 +860,56 @@
 		showCreateFolderModal = false;
 	}}
 />
+
+<!-- Move to Folder Modal -->
+{#if showMoveToFolderModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<div class="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+			<h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+				{$i18n.t('Move to Folder')}
+			</h3>
+			<div class="max-h-60 overflow-y-auto scrollbar-hidden mb-4">
+				{#if Object.keys(folders).length > 0}
+					<button
+						class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-left"
+						on:click={() => {
+							bulkMoveChats(null);
+						}}
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-gray-500">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+						</svg>
+						<span class="text-sm text-gray-700 dark:text-gray-300">{$i18n.t('Unfiled (Root)')}</span>
+					</button>
+					{#each Object.keys(folders).sort((a, b) => folders[a].name.localeCompare(folders[b].name)) as folderId}
+						{#if folders[folderId].parent_id === null}
+							<button
+								class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition text-left"
+								on:click={() => {
+									bulkMoveChats(folderId);
+								}}
+							>
+								<FolderIcon className="w-5 h-5 text-gray-500" strokeWidth="2" />
+								<span class="text-sm text-gray-700 dark:text-gray-300">{folders[folderId].name}</span>
+							</button>
+						{/if}
+					{/each}
+				{/if}
+			</div>
+			<div class="flex justify-end gap-2">
+				<button
+					class="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+					on:click={() => {
+						showMoveToFolderModal = false;
+						selectedFolderForMove = null;
+					}}
+				>
+					{$i18n.t('Cancel')}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 
@@ -1064,6 +1237,59 @@
 					}
 				}}
 			>
+				<!-- Bulk action bar when chats are selected -->
+				{#if $selectedChatIds.size > 0}
+					<div class="px-2 py-2 mb-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
+						<div class="flex items-center justify-between gap-2">
+							<div class="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+								<span class="font-medium">{i18n.t('{{COUNT}} selected', { COUNT: $selectedChatIds.size })}</span>
+							</div>
+							<div class="flex items-center gap-1">
+								<button
+									class="px-2 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-300"
+									on:click={() => {
+										selectedChatIds.set(new Set());
+										lastSelectedChatId.set(null);
+									}}
+									aria-label={$i18n.t('Cancel selection')}
+								>
+									{$i18n.t('Cancel')}
+								</button>
+								<button
+									class="px-2 py-1 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 transition text-white"
+									on:click={() => {
+										bulkArchiveChats();
+									}}
+									aria-label={$i18n.t('Archive selected chats')}
+								>
+									{$i18n.t('Archive')}
+								</button>
+								<button
+									class="px-2 py-1 text-xs rounded-lg bg-red-600 hover:bg-red-700 transition text-white"
+									on:click={() => {
+										bulkDeleteChats();
+									}}
+									aria-label={$i18n.t('Delete selected chats')}
+								>
+									{$i18n.t('Delete')}
+								</button>
+								<button
+									class="px-2 py-1 text-xs rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition text-gray-700 dark:text-gray-300 flex items-center gap-1"
+									on:click={() => {
+										showMoveToFolderModal = true;
+									}}
+									aria-label={$i18n.t('Move selected chats to folder')}
+								>
+									<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M12 9.75 14.25 12m0 0 2.25 2.25M14.25 12l2.25-2.25M12 14.25l-2.25-2.25m0 0L7.5 12m2.25 2.25L7.5 9.75M6.75 12h1.5m4.5 0h1.5m-1.5 2.25h1.5m-3-4.5h.008v.008h-.008zm0 0h-.008v.008h.008z" />
+									</svg>
+									{$i18n.t('Move')}
+								</button>
+							</div>
+						</div>
+					</div>
+				{/if}
+
 				<div class="pb-1.5">
 					<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
 						<a

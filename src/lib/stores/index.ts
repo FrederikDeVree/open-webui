@@ -97,6 +97,10 @@ export const showShortcuts = writable(false);
 export const showArchivedChats = writable(false);
 export const showChangelog = writable(false);
 
+// Multi-select state for chat sidebar
+export const selectedChatIds: Writable<Set<string>> = writable(new Set());
+export const lastSelectedChatId: Writable<string | null> = writable(null);
+
 export const showControls = writable(false);
 export const controlsActiveTab: Writable<'controls' | 'files' | 'overview'> = writable('controls');
 export const showEmbeds = writable(false);
