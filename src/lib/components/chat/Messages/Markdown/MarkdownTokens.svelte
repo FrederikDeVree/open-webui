@@ -18,6 +18,8 @@
 	import AlertRenderer, { alertComponent } from './AlertRenderer.svelte';
 	import Collapsible from '$lib/components/common/Collapsible.svelte';
 	import ToolCallDisplay from '$lib/components/common/ToolCallDisplay.svelte';
+	import SvgPanZoom from '$lib/components/common/SVGPanZoom.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Download from '$lib/components/icons/Download.svelte';
 	import ConsecutiveDetailsGroup from './ConsecutiveDetailsGroup.svelte';
@@ -54,7 +56,7 @@
 		return 'h' + depth;
 	};
 
-	const GROUPABLE_DETAIL_TYPES = new Set(['tool_calls', 'reasoning', 'code_interpreter']);
+	const GROUPABLE_DETAIL_TYPES = new Set(['tool_calls', 'reasoning', 'code_interpreter', 'diagram_renderer']);
 
 	const isGroupableDetailToken = (token: Token & { attributes?: { type?: string } }) => {
 		return token?.type === 'details' && GROUPABLE_DETAIL_TYPES.has(token?.attributes?.type ?? '');
@@ -387,6 +389,27 @@
 							open={$settings?.expandDetails ?? false}
 							className="w-full space-y-1"
 						/>
+					{:else if detailToken?.attributes?.type === 'diagram_renderer'}
+						{@const drDone = detailToken?.attributes?.done === 'true'}
+						{@const drSvg = decode(detailToken?.attributes?.svg ?? '')}
+						{@const drError = decode(detailToken?.attributes?.error ?? '')}
+						<div class="w-full">
+							{#if !drDone}
+								<div class="flex items-center gap-2 text-gray-500 py-1">
+									<Spinner className="size-4" />
+									<span class="text-sm shimmer">{$i18n.t('Drawing diagram…')}</span>
+								</div>
+							{:else if drSvg}
+								<SvgPanZoom
+									className="rounded-2xl max-h-fit overflow-hidden"
+									svg={drSvg}
+								/>
+							{:else if drError}
+								<div class="flex gap-2.5 border px-4 py-3 border-red-600/10 bg-red-600/10 rounded-2xl">
+									{$i18n.t('Failed to render diagram')}: {drError}
+								</div>
+							{/if}
+						</div>
 					{:else if textContent.length > 0}
 						<Collapsible
 							title={detailToken.summary}
@@ -435,6 +458,27 @@
 				open={$settings?.expandDetails ?? false}
 				className="w-full space-y-1"
 			/>
+		{:else if token?.attributes?.type === 'diagram_renderer'}
+			{@const drDone = token?.attributes?.done === 'true'}
+			{@const drSvg = decode(token?.attributes?.svg ?? '')}
+			{@const drError = decode(token?.attributes?.error ?? '')}
+			<div class="w-full">
+				{#if !drDone}
+					<div class="flex items-center gap-2 text-gray-500 py-1">
+						<Spinner className="size-4" />
+						<span class="text-sm shimmer">{$i18n.t('Drawing diagram…')}</span>
+					</div>
+				{:else if drSvg}
+					<SvgPanZoom
+						className="rounded-2xl max-h-fit overflow-hidden"
+						svg={drSvg}
+					/>
+				{:else if drError}
+					<div class="flex gap-2.5 border px-4 py-3 border-red-600/10 bg-red-600/10 rounded-2xl">
+						{$i18n.t('Failed to render diagram')}: {drError}
+					</div>
+				{/if}
+			</div>
 		{:else if textContent.length > 0}
 			<Collapsible
 				title={token.summary}

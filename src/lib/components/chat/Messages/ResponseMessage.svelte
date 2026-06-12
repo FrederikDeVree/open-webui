@@ -191,6 +191,8 @@
 
 	let showRateComment = false;
 
+	let runningActionId: string | null = null;
+
 	const copyToClipboard = async (text) => {
 		text = removeAllDetails(text);
 
@@ -1456,14 +1458,22 @@
 											<button
 												type="button"
 												aria-label={action.name}
+												disabled={runningActionId === action.id}
 												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
 													: 'invisible group-hover:visible'} p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg dark:hover:text-white hover:text-black transition"
-												on:click={() => {
-													actionMessage(action.id, message);
+												on:click={async () => {
+													runningActionId = action.id;
+													try {
+														await actionMessage(action.id, message);
+													} finally {
+														runningActionId = null;
+													}
 												}}
 											>
-												{#if action?.icon}
+												{#if runningActionId === action.id}
+													<Spinner className="size-4" />
+												{:else if action?.icon}
 													<div class="size-4">
 														<img
 															src={action.icon}

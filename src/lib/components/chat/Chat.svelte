@@ -126,7 +126,10 @@
 	let messageInput: MessageInput | undefined;
 	let messagesRef: Messages | undefined;
 
+	let awaitingUpload = false;
+
 	let autoScroll = true;
+	$: scrollDuringGeneration = $settings?.scrollDuringGeneration ?? true;
 	let isNearTop = true;
 	let processing = '';
 	let messagesContainerElement: HTMLDivElement;
@@ -1521,6 +1524,7 @@
 	let scrollRAF = null;
 	let contentsRAF = null;
 	const scheduleScrollToBottom = () => {
+		if (!scrollDuringGeneration) return;
 		if (!scrollRAF) {
 			scrollRAF = requestAnimationFrame(async () => {
 				scrollRAF = null;
@@ -1590,13 +1594,28 @@
 		if (res !== null && res.messages) {
 			// Update chat history with the new messages
 			for (const message of res.messages) {
-				history.messages[message.id] = {
-					...history.messages[message.id],
-					...(history.messages[message.id].content !== message.content
-						? { originalContent: history.messages[message.id].content }
-						: {}),
-					...message
-				};
+				if (history.messages[message.id]) {
+					history.messages[message.id] = {
+						...history.messages[message.id],
+						...(history.messages[message.id].content !== message.content
+							? { originalContent: history.messages[message.id].content }
+							: {}),
+						...message
+					};
+				} else {
+					// New message (e.g. sibling created by an action)
+					history.messages[message.id] = message;
+					if (message.parentId && history.messages[message.parentId]) {
+						const parent = history.messages[message.parentId];
+						if (!parent.childrenIds.includes(message.id)) {
+							parent.childrenIds = [...parent.childrenIds, message.id];
+						}
+					}
+					// Auto-navigate to the new message if it's a leaf node
+					if (!message.childrenIds || message.childrenIds.length === 0) {
+						history.currentId = message.id;
+					}
+				}
 			}
 		}
 
@@ -2005,10 +2024,22 @@
 			files.length > 0 &&
 			files.filter((file) => file.type !== 'image' && file.status === 'uploading').length > 0
 		) {
-			toast.error(
-				$i18n.t(`Oops! There are files still uploading. Please wait for the upload to complete.`)
-			);
-			return;
+			// Wait for all pending uploads to finish before sending
+			awaitingUpload = true;
+			await new Promise<void>((resolve) => {
+				const check = () => {
+					if (
+						files.filter((file) => file.type !== 'image' && file.status === 'uploading')
+							.length === 0
+					) {
+						resolve();
+					} else {
+						setTimeout(check, 100);
+					}
+				};
+				check();
+			});
+			awaitingUpload = false;
 		}
 
 		if (
@@ -3043,6 +3074,7 @@
 						bind:selectedModels
 						shareEnabled={!!history.currentId}
 						{initNewChat}
+						{codeInterpreterEnabled}
 						scrollToTop={!isNearTop ? scrollToTop : null}
 						{archiveChatHandler}
 						{deleteChatHandler}
@@ -3145,6 +3177,7 @@
 									bind:atSelectedModel
 									bind:showCommands
 									bind:dragged
+									uploadPending={awaitingUpload}
 									toolServers={$toolServers}
 									{generating}
 									{stopResponse}
@@ -3232,6 +3265,7 @@
 									{createMessagePair}
 									{onSelect}
 									{onUpload}
+									uploadPending={awaitingUpload}
 									onChange={(data) => {
 										if (!$temporaryChatEnabled) {
 											saveDraft(data);

@@ -49,6 +49,13 @@
 		tokens.some((t) => t?.attributes?.done !== undefined && t?.attributes?.done !== 'true');
 
 	$: codeInterpreterCount = tokens.filter((t) => t?.attributes?.type === 'code_interpreter').length;
+	$: diagramRendererCount = tokens.filter((t) => t?.attributes?.type === 'diagram_renderer').length;
+
+	// Auto-open when a diagram finishes rendering so the SVG is immediately visible
+	$: hasCompletedDiagram = tokens.some(
+		(t) => t?.attributes?.type === 'diagram_renderer' && t?.attributes?.done === 'true'
+	);
+	$: if (hasCompletedDiagram) open = true;
 
 	// Collect all embeds from tool_calls tokens
 	$: allEmbeds = (() => {
@@ -98,6 +105,14 @@
 				parts.push($i18n.t('Ran {{COUNT}} analysis', { COUNT: codeInterpreterCount }));
 			} else {
 				parts.push($i18n.t('Ran {{COUNT}} analyses', { COUNT: codeInterpreterCount }));
+			}
+		}
+
+		if (diagramRendererCount > 0) {
+			if (diagramRendererCount === 1) {
+				parts.push($i18n.t('Drew {{COUNT}} diagram', { COUNT: diagramRendererCount }));
+			} else {
+				parts.push($i18n.t('Drew {{COUNT}} diagrams', { COUNT: diagramRendererCount }));
 			}
 		}
 

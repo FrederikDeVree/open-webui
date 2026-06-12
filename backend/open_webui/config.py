@@ -616,7 +616,7 @@ CODE_INTERPRETER_PYODIDE_PROMPT = """
 ##### Persistent File System
 
 - User-uploaded files are available at `/mnt/uploads/`. When the user asks you to work with their files, read from this directory.
-- You can also write output files to `/mnt/uploads/` so the user can access and download them from the file browser.
+- You can also write output files to `/mnt/uploads/` so the user can access and download them. When you save a file there, always tell the user the exact full path (e.g. `/mnt/uploads/result.csv`) so it becomes a clickable download link.
 - The file system persists across code executions within the same session.
 - Use `import os; os.listdir('/mnt/uploads')` to discover available files."""
 

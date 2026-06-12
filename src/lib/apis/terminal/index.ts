@@ -158,12 +158,15 @@ export const uploadToTerminal = async (
 	baseUrl: string,
 	apiKey: string,
 	directory: string,
-	file: File,
+	files: File | File[],
 	sessionId?: string
-): Promise<{ path: string; size: number } | null> => {
+): Promise<{ files: { path: string; size: number }[] } | null> => {
 	const url = `${baseUrl.replace(/\/$/, '')}/files/upload?directory=${encodeURIComponent(directory)}`;
 	const body = new FormData();
-	body.append('file', file);
+	const fileList = Array.isArray(files) ? files : [files];
+	for (const file of fileList) {
+		body.append('files', file);
+	}
 	const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
 	if (sessionId) headers['X-Session-Id'] = sessionId;
 	const res = await fetch(url, {

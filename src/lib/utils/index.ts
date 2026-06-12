@@ -1927,7 +1927,23 @@ export const initMermaid = async () => {
 	mermaid.initialize({
 		startOnLoad: false, // Should be false when using render API
 		theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-		securityLevel: 'loose'
+		securityLevel: 'loose',
+		// Use native SVG <text> labels instead of HTML (<foreignObject>) labels.
+		// HTML labels are measured in a throwaway DOM node, and when the label
+		// wraps to extra lines the node box does not reliably grow — so long
+		// labels get clipped (e.g. the last line cut off). This is especially
+		// visible in the live GUI, where the SVG's foreignObject HTML re-flows
+		// against the app's own fonts/CSS (different from mermaid's off-screen
+		// measurement). Native SVG labels are sized deterministically from the
+		// wrapped line count, so boxes grow to fit in BOTH the GUI and the PNG.
+		// `htmlLabels` must be set at the top level — mermaid 11 deprecated the
+		// nested `flowchart.htmlLabels` key (it still works but logs a warning).
+		htmlLabels: false,
+		flowchart: {
+			useMaxWidth: true,
+			wrappingWidth: 200,
+			padding: 10,
+		},
 	});
 	return mermaid;
 };
@@ -1986,6 +2002,14 @@ export const renderMermaidDiagram = async (
 	renderId?: string
 ) => {
 	const id = renderId ?? `mermaid-${uuidv4()}`;
+	// Attach a temporary off-screen container with an explicit width so that
+	// dimension-sensitive diagrams (e.g. gantt charts) can read a meaningful
+	// clientWidth during rendering. Without this, mermaid collapses the chart
+	// to ~300 px and the time-axis tick intervals become wrong.
+	const container = document.createElement('div');
+	container.style.cssText =
+		'position:fixed;top:-9999px;left:-9999px;width:1100px;visibility:hidden;';
+	document.body.appendChild(container);
 	try {
 		const parseResult = await mermaid.parse(code, { suppressErrors: false });
 		if (parseResult) {
@@ -1994,6 +2018,7 @@ export const renderMermaidDiagram = async (
 		}
 		return '';
 	} finally {
+		container.remove();
 		// Mermaid can leave temporary d*/i* wrappers on error paths.
 		cleanupMermaidTempElements(id);
 	}
@@ -2010,6 +2035,181 @@ export const renderVegaVisualization = async (spec: string, i18n?: any) => {
 	const view = new vega.View(vega.parse(vegaSpec), { renderer: 'none' });
 	const svg = await view.toSVG();
 	return svg;
+};
+
+/**
+ * Replace every <foreignObject> (mermaid's HTML label container) with a native
+ * SVG <text> element so the label survives SVG→PNG rasterization.
+ *
+ * When an SVG is loaded through an <img> element and drawn onto a canvas, the
+ * HTML inside <foreignObject> is not rendered, so any text it holds disappears
+ * from the resulting PNG. Mermaid puts ALL node/edge label text inside
+ * foreignObjects by default, which is why diagrams rasterize as empty boxes.
+ *
+ * We read the text (preserving line breaks) and the foreignObject's own
+ * width/height (mermaid centers labels inside this box) and emit a centered
+ * <text>/<tspan> equivalent.
+ */
+const convertForeignObjectsToSvgText = (doc: Document) => {
+	const SVG_NS = 'http://www.w3.org/2000/svg';
+	// Pick a label colour that contrasts with the current theme background.
+	const isDark =
+		typeof document !== 'undefined' &&
+		document.documentElement.classList.contains('dark');
+	const defaultFill = isDark ? '#e5e7eb' : '#1f2937';
+
+	const extractLines = (root: Element): string[] => {
+		// Walk the HTML subtree, breaking lines on <br> and block-level elements.
+		const lines: string[] = [];
+		let current = '';
+		const flush = () => {
+			const trimmed = current.replace(/\s+/g, ' ').trim();
+			if (trimmed) lines.push(trimmed);
+			current = '';
+		};
+		const walk = (node: Node) => {
+			if (node.nodeType === Node.TEXT_NODE) {
+				current += node.textContent ?? '';
+				return;
+			}
+			if (node.nodeType !== Node.ELEMENT_NODE) return;
+			const el = node as Element;
+			const tag = el.tagName.toLowerCase();
+			if (tag === 'br') {
+				flush();
+				return;
+			}
+			const isBlock = tag === 'p' || tag === 'div';
+			if (isBlock && current.trim()) flush();
+			Array.from(el.childNodes).forEach(walk);
+			if (isBlock) flush();
+		};
+		walk(root);
+		flush();
+		return lines.length ? lines : [];
+	};
+
+	Array.from(doc.querySelectorAll('foreignObject')).forEach((fo) => {
+		const lines = extractLines(fo);
+
+		const foWidth = parseFloat(fo.getAttribute('width') || '0') || 0;
+		const foHeight = parseFloat(fo.getAttribute('height') || '0') || 0;
+		const foX = parseFloat(fo.getAttribute('x') || '0') || 0;
+		const foY = parseFloat(fo.getAttribute('y') || '0') || 0;
+
+		// Try to inherit an explicit colour from an inline style, else theme default.
+		let fill = defaultFill;
+		const styled = fo.querySelector('[style*="color"]') as HTMLElement | null;
+		const inlineColor = styled?.style?.color;
+		if (inlineColor) fill = inlineColor;
+
+		if (!lines.length) {
+			fo.remove();
+			return;
+		}
+
+		const lineHeight = 16;
+		const cx = foX + foWidth / 2;
+		const cy = foY + foHeight / 2;
+		// Vertically center the block of lines around cy.
+		const startDy = -((lines.length - 1) * lineHeight) / 2;
+
+		const text = doc.createElementNS(SVG_NS, 'text');
+		text.setAttribute('x', String(cx));
+		text.setAttribute('y', String(cy));
+		text.setAttribute('text-anchor', 'middle');
+		text.setAttribute('dominant-baseline', 'central');
+		text.setAttribute('font-family', 'sans-serif');
+		text.setAttribute('font-size', '14px');
+		text.setAttribute('fill', fill);
+
+		lines.forEach((line, i) => {
+			const tspan = doc.createElementNS(SVG_NS, 'tspan');
+			tspan.setAttribute('x', String(cx));
+			tspan.setAttribute('dy', i === 0 ? String(startDy) : String(lineHeight));
+			tspan.textContent = line;
+			text.appendChild(tspan);
+		});
+
+		fo.replaceWith(text);
+	});
+};
+
+/**
+ * Convert an SVG string to a PNG data URI via an off-screen canvas.
+ *
+ * Uses a data-URI (not Blob URL) so the canvas is never tainted by
+ * cross-origin restrictions — mermaid SVGs contain <foreignObject>
+ * which would otherwise trigger a SecurityError on toDataURL().
+ */
+export const svgToPng = (svgString: string, scale = 2): Promise<string> => {
+	return new Promise((resolve, reject) => {
+		// Ensure the SVG has explicit width/height so the <img> gets real dimensions.
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(svgString, 'image/svg+xml');
+		const svgEl = doc.documentElement;
+
+		// Determine the natural size for the canvas. The viewBox is the source of
+		// truth for the aspect ratio: mermaid sets width="100%" on the <svg>, and
+		// parseFloat("100%") === 100, which would otherwise be used as a 100px
+		// width and squish the diagram into a tall, narrow strip. So read the
+		// viewBox first and only fall back to the width/height attributes when
+		// they are absolute pixel values (never percentages).
+		const parsePx = (value: string | null): number => {
+			if (!value) return 0;
+			if (value.trim().endsWith('%')) return 0;
+			const n = parseFloat(value);
+			return Number.isFinite(n) ? n : 0;
+		};
+
+		let width = 0;
+		let height = 0;
+		const viewBox = svgEl.getAttribute('viewBox');
+		if (viewBox) {
+			const parts = viewBox.split(/[\s,]+/);
+			width = parseFloat(parts[2]) || 0;
+			height = parseFloat(parts[3]) || 0;
+		}
+		if (!width) width = parsePx(svgEl.getAttribute('width'));
+		if (!height) height = parsePx(svgEl.getAttribute('height'));
+		width = width || 800;
+		height = height || 600;
+
+		// Mermaid renders node/edge labels as HTML inside <foreignObject>.
+		// A foreignObject cannot be rasterized when the SVG is loaded via an
+		// <img> (the browser either taints the canvas or, more commonly, simply
+		// drops the HTML content), which is why these labels otherwise vanish
+		// from the PNG — leaving empty boxes. Rather than removing them (which
+		// loses all the text), convert each foreignObject's text into a native
+		// SVG <text> element so the labels survive rasterization.
+		convertForeignObjectsToSvgText(doc);
+
+		const cleanSvg = new XMLSerializer().serializeToString(doc);
+		const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(cleanSvg);
+
+		const img = new Image();
+		img.onload = () => {
+			const canvas = document.createElement('canvas');
+			canvas.width = width * scale;
+			canvas.height = height * scale;
+			const ctx = canvas.getContext('2d');
+			if (!ctx) {
+				reject(new Error('Could not get canvas 2d context'));
+				return;
+			}
+			ctx.scale(scale, scale);
+			ctx.drawImage(img, 0, 0, width, height);
+			try {
+				resolve(canvas.toDataURL('image/png'));
+			} catch (e) {
+				reject(e);
+			}
+		};
+		img.onerror = () => {
+			reject(new Error('Failed to load SVG into image'));
+		};
+		img.src = dataUri;
+	});
 };
 
 export const getCodeBlockContents = (content: string): object => {

@@ -341,6 +341,66 @@ def convert_output_to_messages(
                 if output_text:
                     pending_content.append(f'<code_interpreter_output>\n{output_text}\n</code_interpreter_output>')
 
+        elif item_type == 'open_webui:diagram_renderer':
+            # Include diagram renderer output so the LLM knows the diagram
+            # was already rendered and doesn't retry from scratch.
+            code = item.get('code', '')
+            lang = item.get('lang', 'mermaid')
+            error = item.get('error', '')
+            svg = item.get('svg', '')
+            png_url = item.get('png_url', '')
+
+            if code:
+                pending_content.append(f'<diagram lang="{lang}">\n{code}\n</diagram>')
+
+            if error:
+                pending_content.append(f'<diagram_error>\n{error}\n</diagram_error>')
+            elif svg:
+                pending_content.append('<diagram_result>Diagram rendered successfully.</diagram_result>')
+
+            # If we have a PNG, flush text and add a multimodal message
+            # so the VLM can inspect the visual output. Only forward URLs the
+            # provider can actually fetch (data:, http(s):, file:). Older chats
+            # may have persisted a relative file URL (/api/v1/files/.../content)
+            # which providers reject with "The URL must be either a HTTP, data
+            # or file URL." — skip those so follow-up turns don't hard-error.
+            png_url_usable = isinstance(png_url, str) and png_url.startswith(
+                ('data:', 'http://', 'https://', 'file://')
+            )
+            if png_url and not error and not png_url_usable:
+                log.warning(
+                    f'[diagram-inspect] Skipping non-fetchable diagram png_url '
+                    f'(lang={lang}, prefix={png_url[:80]!r})'
+                )
+            if png_url and not error and png_url_usable:
+                flush_pending()
+                log.info(
+                    f'[diagram-inspect] Adding multimodal user message with PNG '
+                    f'(lang={lang}, png_url_len={len(png_url) if png_url else 0}, '
+                    f'png_url_prefix={png_url[:80] if png_url else ""!r})'
+                )
+                messages.append(
+                    {
+                        'role': 'user',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': (
+                                    'Here is a screenshot of the rendered diagram. '
+                                    'Inspect it visually. If it looks correct, continue without outputting a new diagram '
+                                    'and without any further comment on it.'
+                                    'If there are visual issues (wrong layout, missing elements, unreadable text, etc.), '
+                                    'output a corrected diagram in a new code block.'
+                                ),
+                            },
+                            {
+                                'type': 'image_url',
+                                'image_url': {'url': png_url},
+                            },
+                        ],
+                    }
+                )
+
         elif item_type.startswith('open_webui:'):
             # Skip other extension types
             pass
