@@ -356,7 +356,9 @@
 		return clampToFileRoot(path);
 	};
 
-	const buildBreadcrumbs = (path: string) => {
+	const buildBreadcrumbs = (path: string | null) => {
+		if (!path) return fileRoot ? [{ label: fileRoot.label, path: fileRoot.path }] : [{ label: '/', path: '/' }];
+
 		if (fileRoot) {
 			const directory = clampToFileRoot(path);
 			const relative = directory === fileRoot.path ? '' : directory.slice(fileRoot.path.length);
