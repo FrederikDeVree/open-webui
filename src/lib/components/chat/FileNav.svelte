@@ -294,7 +294,7 @@
 						terminalEnabled = config?.features?.terminal !== false;
 						// Re-detect home directory for new terminal
 						const rawHome = await getCwd(terminal.url, terminal.key, undefined);
-						const resolvedHome = rawHome ? normalizePath(rawHome) : null;
+						const resolvedHome = rawHome?.cwd ? normalizePath(rawHome.cwd) : null;
 						homePath =
 							resolvedHome && resolvedHome !== '/'
 								? resolvedHome.endsWith('/')
@@ -956,7 +956,7 @@
 
 			// Detect the user's home directory (global server default, no session)
 			const rawHome = await getCwd(terminal.url, terminal.key, undefined);
-			const resolvedHome = rawHome ? normalizePath(rawHome) : null;
+			const resolvedHome = rawHome?.cwd ? normalizePath(rawHome.cwd) : null;
 			homePath =
 				resolvedHome && resolvedHome !== '/'
 					? resolvedHome.endsWith('/')

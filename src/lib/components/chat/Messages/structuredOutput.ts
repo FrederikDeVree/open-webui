@@ -38,6 +38,9 @@ export type OutputDetailToken = {
 		files?: string;
 		embeds?: string;
 		output?: string;
+		lang?: string;
+		svg?: string;
+		error?: string;
 	};
 };
 
@@ -62,6 +65,7 @@ const GROUPABLE_OUTPUT_TYPES = new Set([
 	'reasoning',
 	'function_call',
 	'open_webui:code_interpreter',
+	'open_webui:diagram_renderer',
 	'web_search_call',
 	'file_search_call',
 	'computer_call'
@@ -229,6 +233,25 @@ function buildOpenAIToolToken(item: OutputItem, isLastItem: boolean) {
 	};
 }
 
+function buildDiagramRendererToken(item: OutputItem, isLastItem: boolean) {
+	const duration = item.duration ?? '';
+	const isDone = isDoneStatus(item.status) || item.duration !== undefined || !isLastItem;
+	const lang = item.lang ?? 'mermaid';
+
+	return {
+		summary: isDone ? 'Drew diagram' : 'Drawing diagram...',
+		text: '',
+		attributes: {
+			type: 'diagram_renderer',
+			done: isDone ? 'true' : 'false',
+			duration: String(duration),
+			lang,
+			svg: stringifyAttribute(item.svg),
+			error: stringifyAttribute(item.error)
+		}
+	};
+}
+
 function buildDetailToken(
 	item: OutputItem,
 	isLastItem: boolean,
@@ -242,6 +265,9 @@ function buildDetailToken(
 	}
 	if (item.type === 'open_webui:code_interpreter') {
 		return buildCodeInterpreterToken(item, isLastItem);
+	}
+	if (item.type === 'open_webui:diagram_renderer') {
+		return buildDiagramRendererToken(item, isLastItem);
 	}
 	if (item.type && OPENAI_TOOL_NAMES[item.type]) {
 		return buildOpenAIToolToken(item, isLastItem);

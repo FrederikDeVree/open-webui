@@ -1,7 +1,13 @@
 <script lang="ts">
+	import { decode } from 'html-entities';
 	import Collapsible from '$lib/components/common/Collapsible.svelte';
 	import ToolCallDisplay from '$lib/components/common/ToolCallDisplay.svelte';
+	import SvgPanZoom from '$lib/components/common/SVGPanZoom.svelte';
+	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { settings } from '$lib/stores';
+	import { getContext } from 'svelte';
+
+	const i18n = getContext('i18n');
 
 	import Markdown from './Markdown.svelte';
 	import ConsecutiveDetailsGroup from './Markdown/ConsecutiveDetailsGroup.svelte';
@@ -74,6 +80,26 @@
 							open={$settings?.expandDetails ?? false}
 							className="w-full space-y-1"
 						/>
+					{:else if detailToken.attributes?.type === 'diagram_renderer'}
+						{@const drDone = detailToken.attributes?.done === 'true'}
+						{@const drSvg = decode(detailToken.attributes?.svg ?? '')}
+						{@const drError = decode(detailToken.attributes?.error ?? '')}
+						<div class="w-full">
+							{#if !drDone}
+								<div class="flex items-center gap-2 text-gray-500 py-1">
+									<Spinner className="size-4" />
+									<span class="text-sm shimmer">{$i18n.t('Drawing diagram…')}</span>
+								</div>
+							{:else if drSvg}
+								<SvgPanZoom className="rounded-2xl max-h-fit overflow-hidden" svg={drSvg} />
+							{:else if drError}
+								<div
+									class="flex gap-2.5 border px-4 py-3 border-red-600/10 bg-red-600/10 rounded-2xl"
+								>
+									{$i18n.t('Failed to render diagram')}: {drError}
+								</div>
+							{/if}
+						</div>
 					{:else if detailToken.text?.length > 0}
 						<Collapsible
 							title={getDetailTitle(detailToken)}
@@ -114,6 +140,24 @@
 				open={$settings?.expandDetails ?? false}
 				className="w-full space-y-1"
 			/>
+		{:else if detailToken.attributes?.type === 'diagram_renderer'}
+			{@const drDone = detailToken.attributes?.done === 'true'}
+			{@const drSvg = decode(detailToken.attributes?.svg ?? '')}
+			{@const drError = decode(detailToken.attributes?.error ?? '')}
+			<div class="w-full">
+				{#if !drDone}
+					<div class="flex items-center gap-2 text-gray-500 py-1">
+						<Spinner className="size-4" />
+						<span class="text-sm shimmer">{$i18n.t('Drawing diagram…')}</span>
+					</div>
+				{:else if drSvg}
+					<SvgPanZoom className="rounded-2xl max-h-fit overflow-hidden" svg={drSvg} />
+				{:else if drError}
+					<div class="flex gap-2.5 border px-4 py-3 border-red-600/10 bg-red-600/10 rounded-2xl">
+						{$i18n.t('Failed to render diagram')}: {drError}
+					</div>
+				{/if}
+			</div>
 		{:else if detailToken.text?.length > 0}
 			<Collapsible
 				title={getDetailTitle(detailToken)}
