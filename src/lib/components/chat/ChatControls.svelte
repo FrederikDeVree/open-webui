@@ -108,6 +108,9 @@
 	// Auto-switch to Files tab when a terminal is selected (do not open the pane automatically)
 	$: if ($selectedTerminalId && showFilesTab) {
 		activeTab = 'files';
+		if (largeScreen) {
+			showControls.set($settings?.showFilesOnTerminalSelect ?? true);
+		}
 	}
 
 	// Clear selected direct terminal if user lost permission

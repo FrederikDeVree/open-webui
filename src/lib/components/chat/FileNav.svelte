@@ -25,7 +25,9 @@
 		deleteEntry,
 		moveEntry,
 		setCwd,
-		type FileEntry
+		type FileEntry,
+		type TerminalFileRoot,
+		type TerminalCwd
 	} from '$lib/apis/terminal';
 	import { isCodeFile } from '$lib/utils/codeHighlight';
 	import Folder from '../icons/Folder.svelte';
@@ -87,7 +89,8 @@
 	};
 
 	// ── Directory state ──────────────────────────────────────────────────
-	let currentPath = savedPath ?? '/';
+	let currentPath = savedPath;
+	let fileRoot: TerminalFileRoot | null = null;
 	let entries: FileEntry[] = [];
 
 	// ── Home directory (per terminal connection) ─────────────────────────
@@ -300,10 +303,7 @@
 								: null;
 					}
 
-					const rawCwd = await getCwd(terminal.url, terminal.key, chatId ?? undefined);
-					const cwd = rawCwd ? normalizePath(rawCwd) : null;
-					const dir = cwd ? (cwd.endsWith('/') ? cwd : cwd + '/') : (homePath ?? '/');
-					savedPath = clampToHome(dir);
+					savedPath = applyCwd(await getCwd(terminal.url, terminal.key, chatId ?? undefined));
 					loadDir(savedPath);
 				})();
 			}
@@ -325,21 +325,52 @@
 	/** Normalize Windows backslashes to forward slashes. */
 	const normalizePath = (p: string) => p.replace(/\\/g, '/');
 
-	const buildBreadcrumbs = (path: string, home: string | null = null) => {
-		// When under a known home dir, show ~ as root and only show the relative parts
-		if (home && path.startsWith(home)) {
-			const rel = path.slice(home.length);
-			const parts = rel.split('/').filter(Boolean);
-			const root = { label: '~', path: home };
+	const asDirectoryPath = (path: string) => {
+		const normalized = normalizePath(path || '/');
+		return normalized.endsWith('/') ? normalized : `${normalized}/`;
+	};
+
+	const setFileRoot = (root?: TerminalFileRoot) => {
+		fileRoot = root?.path
+			? {
+					path: asDirectoryPath(root.path),
+					label: root.label || 'Home'
+				}
+			: null;
+	};
+
+	const isInsideFileRoot = (path: string) => {
+		if (!fileRoot) return true;
+		const directory = asDirectoryPath(path);
+		return directory === fileRoot.path || directory.startsWith(fileRoot.path);
+	};
+
+	const clampToFileRoot = (path: string) => {
+		if (!fileRoot) return asDirectoryPath(path);
+		return isInsideFileRoot(path) ? asDirectoryPath(path) : fileRoot.path;
+	};
+
+	const applyCwd = (cwd: TerminalCwd | null) => {
+		setFileRoot(cwd?.root);
+		const path = cwd?.cwd ? asDirectoryPath(cwd.cwd) : (fileRoot?.path ?? '/');
+		return clampToFileRoot(path);
+	};
+
+	const buildBreadcrumbs = (path: string) => {
+		if (fileRoot) {
+			const directory = clampToFileRoot(path);
+			const relative = directory === fileRoot.path ? '' : directory.slice(fileRoot.path.length);
+			const parts = relative.split('/').filter(Boolean);
 			return parts.reduce(
 				(acc, part) => {
 					const prev = acc[acc.length - 1];
 					acc.push({ label: part, path: `${prev.path}${part}/` });
 					return acc;
 				},
-				[root]
+				[{ label: fileRoot.label, path: fileRoot.path }]
 			);
 		}
+
 		const parts = path.split('/').filter(Boolean);
 		const isDrive = /^[A-Za-z]:$/.test(parts[0] ?? '');
 		const root = isDrive ? { label: parts[0], path: `${parts[0]}/` } : { label: '/', path: '/' };
@@ -382,6 +413,7 @@
 	const loadDir = async (path: string) => {
 		const terminal = selectedTerminal;
 		if (!terminal) return;
+		const directory = clampToFileRoot(path);
 
 		path = clampToHome(path);
 
@@ -391,15 +423,15 @@
 		previewPort = null;
 		clearFilePreview();
 		clearSelection();
-		currentPath = path;
-		savedPath = path;
-		pushNavHistory(path);
+		currentPath = directory;
+		savedPath = directory;
+		pushNavHistory(directory);
 
-		const result = await listFiles(terminal.url, terminal.key, path, chatId ?? undefined);
+		const result = await listFiles(terminal.url, terminal.key, directory, chatId ?? undefined);
 		loading = false;
 
 		// Set working directory on the terminal server (fire-and-forget)
-		setCwd(terminal.url, terminal.key, path, chatId ?? undefined);
+		setCwd(terminal.url, terminal.key, directory, chatId ?? undefined);
 
 		if (result === null) {
 			error =
@@ -867,6 +899,10 @@
 			handledDisplayFile = true;
 			showFileNavPath.set(null);
 			filePath = normalizePath(filePath);
+			if (!isInsideFileRoot(filePath)) {
+				await loadDir(fileRoot?.path ?? '/');
+				return;
+			}
 
 			const lastSlash = filePath.lastIndexOf('/');
 			const dir = lastSlash > 0 ? filePath.substring(0, lastSlash + 1) : '/';
@@ -889,6 +925,10 @@
 			if (!filePath || !selectedTerminal) return;
 			showFileNavDir.set(null);
 			filePath = normalizePath(filePath);
+			if (!isInsideFileRoot(filePath)) {
+				await loadDir(fileRoot?.path ?? '/');
+				return;
+			}
 
 			const lastSlash = filePath.lastIndexOf('/');
 			const dir = lastSlash > 0 ? filePath.substring(0, lastSlash + 1) : '/';
@@ -924,11 +964,10 @@
 
 			if (chatId || savedPath === null) {
 				// Fetch session-specific cwd from the server (or global default for new chats)
-				const rawCwd = await getCwd(terminal.url, terminal.key, chatId ?? undefined);
-				const cwd = rawCwd ? normalizePath(rawCwd) : null;
-				if (cwd) savedPath = cwd.endsWith('/') ? cwd : cwd + '/';
+				savedPath = applyCwd(await getCwd(terminal.url, terminal.key, chatId ?? undefined));
 			}
-			loadDir(clampToHome(savedPath ?? homePath ?? '/'));
+			savedPath = clampToFileRoot(savedPath);
+			loadDir(savedPath);
 		}
 
 		mounted = true;
@@ -1029,7 +1068,7 @@
 
 		{#if previewPort === null}
 			<FileNavToolbar
-				breadcrumbs={buildBreadcrumbs(currentPath, homePath)}
+				breadcrumbs={buildBreadcrumbs(currentPath)}
 				{selectedFile}
 				{loading}
 				{canGoBack}
