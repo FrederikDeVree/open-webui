@@ -1,8 +1,5 @@
 <script context="module">
 	import { marked } from 'marked';
-	import { replaceTokens, processResponseContent } from '$lib/utils';
-	import { linkifyPyodidePaths } from '$lib/utils/pyodide';
-	import { user } from '$lib/stores';
 
 	import markedExtension from '$lib/utils/marked/extension';
 	import markedKatexExtension from '$lib/utils/marked/katex-extension';
@@ -35,6 +32,7 @@
 <script>
 	import { onDestroy } from 'svelte';
 	import { replaceTokens, processResponseContent } from '$lib/utils';
+	import { linkifyPyodidePaths } from '$lib/utils/pyodide';
 	import { user } from '$lib/stores';
 
 	import MarkdownTokens from './Markdown/MarkdownTokens.svelte';
