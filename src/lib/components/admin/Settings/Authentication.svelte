@@ -155,7 +155,7 @@
 
 <form
 	class="flex flex-col h-full justify-between space-y-3 text-sm"
-	on:submit|preventDefault={submitHandler}
+	onsubmit={(e) => { e.preventDefault(); submitHandler(); }}
 >
 	<div class="space-y-3 overflow-y-scroll scrollbar-hidden h-full">
 		{#if adminConfig !== null}
