@@ -28,7 +28,7 @@ services:
   # ── Database ─────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg18-trixie
-    container_name: arvoo-postgres
+    container_name: open-webui-dev-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -38,7 +38,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - open-webui-dev-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -50,7 +50,7 @@ services:
   # ── Admin UI ─────────────────────────────────────────
   adminer:
     image: adminer:latest
-    container_name: arvoo-adminer
+    container_name: open-webui-dev-adminer
     restart: unless-stopped
     ports:
       - "9080:8080"
@@ -63,7 +63,7 @@ services:
   # ── Backup Agent ────────────────────────────────────
   backup:
     image: postgres:18
-    container_name: arvoo-backup
+    container_name: open-webui-dev-backup
     restart: unless-stopped
     depends_on:
       postgres:
@@ -75,7 +75,7 @@ services:
       BACKUP_DIR: /backups
       BACKUP_RETENTION_DAYS: 14
     volumes:
-      - /data/backups/postgres:/backups
+      - /data/backups/open-webui-dev:/backups
       - ./backup-postgres.sh:/usr/local/bin/backup-postgres.sh
     entrypoint: ["/usr/local/bin/backup-postgres.sh"]
     networks:
@@ -88,6 +88,6 @@ networks:
 volumes:
   open-webui-dev:
     name: open-webui-dev
-    external: true          # keep your existing named volume
-  postgres-data:
-    name: arvoo-postgres-data
+    external: true
+  open-webui-dev-data:
+    name: openwebui-dev-data
