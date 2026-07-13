@@ -190,7 +190,9 @@ if CUSTOM_NAME:
         if r.ok:
             if 'logo' in data:
                 WEBUI_FAVICON_URL = url = (
-                    f'https://api.openwebui.com{data["logo"]}' if data['logo'][0] == '/' else data['logo']
+                    f'https://api.openwebui.com{data["logo"]}'
+                    if data['logo'][0] == '/'
+                    else data['logo']
                 )
 
                 r = requests.get(url, stream=True)
@@ -200,7 +202,11 @@ if CUSTOM_NAME:
                         shutil.copyfileobj(r.raw, f)
 
             if 'splash' in data:
-                url = f'https://api.openwebui.com{data["splash"]}' if data['splash'][0] == '/' else data['splash']
+                url = (
+                    f'https://api.openwebui.com{data["splash"]}'
+                    if data['splash'][0] == '/'
+                    else data['splash']
+                )
 
                 r = requests.get(url, stream=True)
                 if r.status_code == 200:
@@ -238,7 +244,9 @@ K8S_FLAG = os.getenv('K8S_FLAG', '')
 USE_OLLAMA_DOCKER = os.getenv('USE_OLLAMA_DOCKER', 'false')
 
 if OLLAMA_BASE_URL == '' and OLLAMA_API_BASE_URL != '':
-    OLLAMA_BASE_URL = OLLAMA_API_BASE_URL[:-4] if OLLAMA_API_BASE_URL.endswith('/api') else OLLAMA_API_BASE_URL
+    OLLAMA_BASE_URL = (
+        OLLAMA_API_BASE_URL[:-4] if OLLAMA_API_BASE_URL.endswith('/api') else OLLAMA_API_BASE_URL
+    )
 
 if ENV == 'prod':
     if OLLAMA_BASE_URL == '/ollama' and not K8S_FLAG:
@@ -332,7 +340,8 @@ OPENAI_API_BASE_URLS = os.getenv('OPENAI_API_BASE_URLS', '')
 OPENAI_API_BASE_URLS = OPENAI_API_BASE_URLS if OPENAI_API_BASE_URLS != '' else OPENAI_API_BASE_URL
 
 OPENAI_API_BASE_URLS = [
-    url.strip() if url != '' else 'https://api.openai.com/v1' for url in OPENAI_API_BASE_URLS.split(';')
+    url.strip() if url != '' else 'https://api.openai.com/v1'
+    for url in OPENAI_API_BASE_URLS.split(';')
 ]
 OPENAI_API_BASE_URLS = OPENAI_API_BASE_URLS
 
@@ -415,7 +424,9 @@ ENABLE_CODE_INTERPRETER = os.getenv('ENABLE_CODE_INTERPRETER', 'True').lower() =
 
 ENABLE_MEMORIES = os.getenv('ENABLE_MEMORIES', 'True').lower() == 'true'
 ENABLE_MEMORY_SYSTEM_CONTEXT = os.getenv('ENABLE_MEMORY_SYSTEM_CONTEXT', 'True').lower() == 'true'
-ENABLE_MEMORY_BACKGROUND_REVIEW = os.getenv('ENABLE_MEMORY_BACKGROUND_REVIEW', 'False').lower() == 'true'
+ENABLE_MEMORY_BACKGROUND_REVIEW = (
+    os.getenv('ENABLE_MEMORY_BACKGROUND_REVIEW', 'False').lower() == 'true'
+)
 MEMORIES_REVIEW_INTERVAL_TURNS = int(os.getenv('MEMORIES_REVIEW_INTERVAL_TURNS', '10'))
 MEMORIES_USER_CHAR_LIMIT = int(os.getenv('MEMORIES_USER_CHAR_LIMIT', '2000'))
 MEMORIES_CONTEXT_CHAR_LIMIT = int(os.getenv('MEMORIES_CONTEXT_CHAR_LIMIT', '2000'))
@@ -424,7 +435,9 @@ CODE_INTERPRETER_ENGINE = os.getenv('CODE_INTERPRETER_ENGINE', 'pyodide')
 
 CODE_INTERPRETER_PROMPT_TEMPLATE = os.getenv('CODE_INTERPRETER_PROMPT_TEMPLATE', '')
 
-CODE_INTERPRETER_JUPYTER_URL = os.getenv('CODE_INTERPRETER_JUPYTER_URL', os.getenv('CODE_EXECUTION_JUPYTER_URL', ''))
+CODE_INTERPRETER_JUPYTER_URL = os.getenv(
+    'CODE_INTERPRETER_JUPYTER_URL', os.getenv('CODE_EXECUTION_JUPYTER_URL', '')
+)
 
 CODE_INTERPRETER_JUPYTER_AUTH = os.getenv(
     'CODE_INTERPRETER_JUPYTER_AUTH',
@@ -450,7 +463,9 @@ CODE_INTERPRETER_JUPYTER_TIMEOUT = int(
 )
 
 CODE_INTERPRETER_BLOCKED_MODULES = [
-    library.strip() for library in os.getenv('CODE_INTERPRETER_BLOCKED_MODULES', '').split(',') if library.strip()
+    library.strip()
+    for library in os.getenv('CODE_INTERPRETER_BLOCKED_MODULES', '').split(',')
+    if library.strip()
 ]
 
 DEFAULT_CODE_INTERPRETER_PROMPT = """
@@ -524,7 +539,9 @@ MARIADB_VECTOR_INITIALIZE_MAX_VECTOR_LENGTH = int(
 # Distance strategy:
 #   - cosine     => vec_distance_cosine(...)
 #   - euclidean  => vec_distance_euclidean(...)
-MARIADB_VECTOR_DISTANCE_STRATEGY = os.getenv('MARIADB_VECTOR_DISTANCE_STRATEGY', 'cosine').strip().lower()
+MARIADB_VECTOR_DISTANCE_STRATEGY = (
+    os.getenv('MARIADB_VECTOR_DISTANCE_STRATEGY', 'cosine').strip().lower()
+)
 
 # HNSW M parameter (MariaDB VECTOR INDEX ... M=<int>)
 MARIADB_VECTOR_INDEX_M = int(os.getenv('MARIADB_VECTOR_INDEX_M', '8').strip() or '8')
@@ -594,7 +611,9 @@ MILVUS_HNSW_EFCONSTRUCTION = int(os.getenv('MILVUS_HNSW_EFCONSTRUCTION', '100'))
 MILVUS_IVF_FLAT_NLIST = int(os.getenv('MILVUS_IVF_FLAT_NLIST', '128'))
 MILVUS_DISKANN_MAX_DEGREE = int(os.getenv('MILVUS_DISKANN_MAX_DEGREE', '56'))
 MILVUS_DISKANN_SEARCH_LIST_SIZE = int(os.getenv('MILVUS_DISKANN_SEARCH_LIST_SIZE', '100'))
-ENABLE_MILVUS_MULTITENANCY_MODE = os.getenv('ENABLE_MILVUS_MULTITENANCY_MODE', 'false').lower() == 'true'
+ENABLE_MILVUS_MULTITENANCY_MODE = (
+    os.getenv('ENABLE_MILVUS_MULTITENANCY_MODE', 'false').lower() == 'true'
+)
 # Hyphens not allowed, need to use underscores in collection names
 MILVUS_COLLECTION_PREFIX = os.getenv('MILVUS_COLLECTION_PREFIX', 'open_webui')
 
@@ -606,7 +625,9 @@ QDRANT_PREFER_GRPC = os.getenv('QDRANT_PREFER_GRPC', 'false').lower() == 'true'
 QDRANT_GRPC_PORT = int(os.getenv('QDRANT_GRPC_PORT', '6334'))
 QDRANT_TIMEOUT = int(os.getenv('QDRANT_TIMEOUT', '5'))
 QDRANT_HNSW_M = int(os.getenv('QDRANT_HNSW_M', '16'))
-ENABLE_QDRANT_MULTITENANCY_MODE = os.getenv('ENABLE_QDRANT_MULTITENANCY_MODE', 'true').lower() == 'true'
+ENABLE_QDRANT_MULTITENANCY_MODE = (
+    os.getenv('ENABLE_QDRANT_MULTITENANCY_MODE', 'true').lower() == 'true'
+)
 QDRANT_COLLECTION_PREFIX = os.getenv('QDRANT_COLLECTION_PREFIX', 'open-webui')
 
 WEAVIATE_HTTP_HOST = os.getenv('WEAVIATE_HTTP_HOST', '')
@@ -640,7 +661,9 @@ if VECTOR_DB == 'pgvector' and not PGVECTOR_DB_URL.startswith('postgres'):
     raise ValueError(
         'Pgvector requires setting PGVECTOR_DB_URL or using Postgres with vector extension as the primary database.'
     )
-PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH = int(os.getenv('PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH', '1536'))
+PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH = int(
+    os.getenv('PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH', '1536')
+)
 
 PGVECTOR_USE_HALFVEC = os.getenv('PGVECTOR_USE_HALFVEC', 'false').lower() == 'true'
 
@@ -656,7 +679,9 @@ PGVECTOR_CREATE_EXTENSION = os.getenv('PGVECTOR_CREATE_EXTENSION', 'true').lower
 PGVECTOR_PGCRYPTO = os.getenv('PGVECTOR_PGCRYPTO', 'false').lower() == 'true'
 PGVECTOR_PGCRYPTO_KEY = os.getenv('PGVECTOR_PGCRYPTO_KEY', None)
 if PGVECTOR_PGCRYPTO and not PGVECTOR_PGCRYPTO_KEY:
-    raise ValueError('PGVECTOR_PGCRYPTO is enabled but PGVECTOR_PGCRYPTO_KEY is not set. Please provide a valid key.')
+    raise ValueError(
+        'PGVECTOR_PGCRYPTO is enabled but PGVECTOR_PGCRYPTO_KEY is not set. Please provide a valid key.'
+    )
 
 
 PGVECTOR_POOL_SIZE = os.getenv('PGVECTOR_POOL_SIZE', None)
@@ -734,7 +759,9 @@ else:
 # openGauss
 OPENGAUSS_DB_URL = os.getenv('OPENGAUSS_DB_URL', DATABASE_URL)
 
-OPENGAUSS_INITIALIZE_MAX_VECTOR_LENGTH = int(os.getenv('OPENGAUSS_INITIALIZE_MAX_VECTOR_LENGTH', '1536'))
+OPENGAUSS_INITIALIZE_MAX_VECTOR_LENGTH = int(
+    os.getenv('OPENGAUSS_INITIALIZE_MAX_VECTOR_LENGTH', '1536')
+)
 
 OPENGAUSS_POOL_SIZE = os.getenv('OPENGAUSS_POOL_SIZE', None)
 
@@ -799,7 +826,9 @@ ORACLE_DB_POOL_INCREMENT = int(os.getenv('ORACLE_DB_POOL_INCREMENT', 1))
 
 if VECTOR_DB == 'oracle23ai':
     if not ORACLE_DB_USER or not ORACLE_DB_PASSWORD or not ORACLE_DB_DSN:
-        raise ValueError('Oracle23ai requires setting ORACLE_DB_USER, ORACLE_DB_PASSWORD, and ORACLE_DB_DSN.')
+        raise ValueError(
+            'Oracle23ai requires setting ORACLE_DB_USER, ORACLE_DB_PASSWORD, and ORACLE_DB_DSN.'
+        )
     if ORACLE_DB_USE_WALLET and (not ORACLE_WALLET_DIR or not ORACLE_WALLET_PASSWORD):
         raise ValueError(
             'Oracle23ai requires setting ORACLE_WALLET_DIR and ORACLE_WALLET_PASSWORD when using wallet authentication.'
@@ -826,7 +855,9 @@ VALKEY_HNSW_EF_RUNTIME = int(os.getenv('VALKEY_HNSW_EF_RUNTIME', '10'))
 
 
 # If configured, Google Drive will be available as an upload option.
-ENABLE_GOOGLE_DRIVE_INTEGRATION = os.getenv('ENABLE_GOOGLE_DRIVE_INTEGRATION', 'False').lower() == 'true'
+ENABLE_GOOGLE_DRIVE_INTEGRATION = (
+    os.getenv('ENABLE_GOOGLE_DRIVE_INTEGRATION', 'False').lower() == 'true'
+)
 
 GOOGLE_DRIVE_CLIENT_ID = os.getenv('GOOGLE_DRIVE_CLIENT_ID', '')
 
@@ -867,7 +898,9 @@ DATALAB_MARKER_FORCE_OCR = os.getenv('DATALAB_MARKER_FORCE_OCR', 'false').lower(
 
 DATALAB_MARKER_PAGINATE = os.getenv('DATALAB_MARKER_PAGINATE', 'false').lower() == 'true'
 
-DATALAB_MARKER_STRIP_EXISTING_OCR = os.getenv('DATALAB_MARKER_STRIP_EXISTING_OCR', 'false').lower() == 'true'
+DATALAB_MARKER_STRIP_EXISTING_OCR = (
+    os.getenv('DATALAB_MARKER_STRIP_EXISTING_OCR', 'false').lower() == 'true'
+)
 
 DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION = (
     os.getenv('DATALAB_MARKER_DISABLE_IMAGE_EXTRACTION', 'false').lower() == 'true'
@@ -893,7 +926,9 @@ except json.JSONDecodeError:
 
 MINERU_PARAMS = mineru_params
 
-MINERU_FILE_EXTENSIONS = [ext.strip() for ext in os.getenv('MINERU_FILE_EXTENSIONS', 'pdf').split(',') if ext.strip()]
+MINERU_FILE_EXTENSIONS = [
+    ext.strip() for ext in os.getenv('MINERU_FILE_EXTENSIONS', 'pdf').split(',') if ext.strip()
+]
 
 EXTERNAL_DOCUMENT_LOADER_URL = os.getenv('EXTERNAL_DOCUMENT_LOADER_URL', '')
 
@@ -939,7 +974,9 @@ PADDLEOCR_VL_BASE_URL = os.getenv('PADDLEOCR_VL_BASE_URL', 'http://localhost:808
 
 PADDLEOCR_VL_TOKEN = os.getenv('PADDLEOCR_VL_TOKEN', '')
 
-BYPASS_EMBEDDING_AND_RETRIEVAL = os.getenv('BYPASS_EMBEDDING_AND_RETRIEVAL', 'False').lower() == 'true'
+BYPASS_EMBEDDING_AND_RETRIEVAL = (
+    os.getenv('BYPASS_EMBEDDING_AND_RETRIEVAL', 'False').lower() == 'true'
+)
 
 
 RAG_TOP_K = int(os.getenv('RAG_TOP_K', '3'))
@@ -955,18 +992,26 @@ ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS = (
 
 RAG_FULL_CONTEXT = os.getenv('RAG_FULL_CONTEXT', 'False').lower() == 'true'
 
-RAG_FILE_MAX_COUNT = int(os.getenv('RAG_FILE_MAX_COUNT')) if os.getenv('RAG_FILE_MAX_COUNT') else None
+RAG_FILE_MAX_COUNT = (
+    int(os.getenv('RAG_FILE_MAX_COUNT')) if os.getenv('RAG_FILE_MAX_COUNT') else None
+)
 
 RAG_FILE_MAX_SIZE = int(os.getenv('RAG_FILE_MAX_SIZE')) if os.getenv('RAG_FILE_MAX_SIZE') else None
 
-RAG_FILE_CONTENT_SEARCH_MAX_CHARS = int(os.getenv('RAG_FILE_CONTENT_SEARCH_MAX_CHARS', str(64 * 1024 * 1024)))
+RAG_FILE_CONTENT_SEARCH_MAX_CHARS = int(
+    os.getenv('RAG_FILE_CONTENT_SEARCH_MAX_CHARS', str(64 * 1024 * 1024))
+)
 
 FILE_IMAGE_COMPRESSION_WIDTH = (
-    int(os.getenv('FILE_IMAGE_COMPRESSION_WIDTH')) if os.getenv('FILE_IMAGE_COMPRESSION_WIDTH') else None
+    int(os.getenv('FILE_IMAGE_COMPRESSION_WIDTH'))
+    if os.getenv('FILE_IMAGE_COMPRESSION_WIDTH')
+    else None
 )
 
 FILE_IMAGE_COMPRESSION_HEIGHT = (
-    int(os.getenv('FILE_IMAGE_COMPRESSION_HEIGHT')) if os.getenv('FILE_IMAGE_COMPRESSION_HEIGHT') else None
+    int(os.getenv('FILE_IMAGE_COMPRESSION_HEIGHT'))
+    if os.getenv('FILE_IMAGE_COMPRESSION_HEIGHT')
+    else None
 )
 
 
@@ -989,7 +1034,9 @@ RAG_EMBEDDING_MODEL_AUTO_UPDATE = (
     not OFFLINE_MODE and os.getenv('RAG_EMBEDDING_MODEL_AUTO_UPDATE', 'True').lower() == 'true'
 )
 
-RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE = os.getenv('RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE', 'True').lower() == 'true'
+RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE = (
+    os.getenv('RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE', 'True').lower() == 'true'
+)
 
 RAG_EMBEDDING_BATCH_SIZE = int(
     os.getenv('RAG_EMBEDDING_BATCH_SIZE') or os.getenv('RAG_EMBEDDING_OPENAI_BATCH_SIZE', '1')
@@ -1016,7 +1063,9 @@ RAG_RERANKING_MODEL_AUTO_UPDATE = (
     not OFFLINE_MODE and os.getenv('RAG_RERANKING_MODEL_AUTO_UPDATE', 'True').lower() == 'true'
 )
 
-RAG_RERANKING_MODEL_TRUST_REMOTE_CODE = os.getenv('RAG_RERANKING_MODEL_TRUST_REMOTE_CODE', 'True').lower() == 'true'
+RAG_RERANKING_MODEL_TRUST_REMOTE_CODE = (
+    os.getenv('RAG_RERANKING_MODEL_TRUST_REMOTE_CODE', 'True').lower() == 'true'
+)
 
 RAG_RERANKING_BATCH_SIZE = int(os.getenv('RAG_RERANKING_BATCH_SIZE', '32'))
 
@@ -1029,7 +1078,9 @@ RAG_EXTERNAL_RERANKER_TIMEOUT = os.getenv('RAG_EXTERNAL_RERANKER_TIMEOUT', '')
 
 RAG_TEXT_SPLITTER = os.getenv('RAG_TEXT_SPLITTER', '')
 
-ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER = os.getenv('ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER', 'True').lower() == 'true'
+ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER = (
+    os.getenv('ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER', 'True').lower() == 'true'
+)
 
 
 TIKTOKEN_CACHE_DIR = os.getenv('TIKTOKEN_CACHE_DIR', f'{CACHE_DIR}/tiktoken')
@@ -1105,7 +1156,9 @@ web_fetch_filter_list = os.getenv('WEB_FETCH_FILTER_LIST', '')
 if web_fetch_filter_list == '':
     web_fetch_filter_list = []
 else:
-    web_fetch_filter_list = [item.strip() for item in web_fetch_filter_list.split(',') if item.strip()]
+    web_fetch_filter_list = [
+        item.strip() for item in web_fetch_filter_list.split(',') if item.strip()
+    ]
 
 WEB_FETCH_FILTER_LIST = list(set(DEFAULT_WEB_FETCH_FILTER_LIST + web_fetch_filter_list))
 
@@ -1121,7 +1174,9 @@ YOUTUBE_LOADER_PROXY_URL = os.getenv('YOUTUBE_LOADER_PROXY_URL', '')
 
 ENABLE_WEB_SEARCH = os.getenv('ENABLE_WEB_SEARCH', 'False').lower() == 'true'
 
-ENABLE_WEB_SEARCH_CONFIRMATION = os.getenv('ENABLE_WEB_SEARCH_CONFIRMATION', 'False').lower() == 'true'
+ENABLE_WEB_SEARCH_CONFIRMATION = (
+    os.getenv('ENABLE_WEB_SEARCH_CONFIRMATION', 'False').lower() == 'true'
+)
 
 WEB_SEARCH_CONFIRMATION_CONTENT = os.getenv(
     'WEB_SEARCH_CONFIRMATION_CONTENT',
@@ -1157,7 +1212,9 @@ WEB_SEARCH_DOMAIN_FILTER_LIST = web_search_domain_filter_list
 WEB_SEARCH_CONCURRENT_REQUESTS = int(os.getenv('WEB_SEARCH_CONCURRENT_REQUESTS', '0'))
 
 WEB_FETCH_MAX_CONTENT_LENGTH = (
-    int(os.getenv('WEB_FETCH_MAX_CONTENT_LENGTH')) if os.getenv('WEB_FETCH_MAX_CONTENT_LENGTH') else None
+    int(os.getenv('WEB_FETCH_MAX_CONTENT_LENGTH'))
+    if os.getenv('WEB_FETCH_MAX_CONTENT_LENGTH')
+    else None
 )
 
 WEB_LOADER_ENGINE = os.getenv('WEB_LOADER_ENGINE', '')
@@ -1168,7 +1225,9 @@ WEB_LOADER_CONCURRENT_REQUESTS = int(os.getenv('WEB_LOADER_CONCURRENT_REQUESTS',
 WEB_LOADER_TIMEOUT = os.getenv('WEB_LOADER_TIMEOUT', '')
 
 
-ENABLE_WEB_LOADER_SSL_VERIFICATION = os.getenv('ENABLE_WEB_LOADER_SSL_VERIFICATION', 'True').lower() == 'true'
+ENABLE_WEB_LOADER_SSL_VERIFICATION = (
+    os.getenv('ENABLE_WEB_LOADER_SSL_VERIFICATION', 'True').lower() == 'true'
+)
 
 WEB_SEARCH_TRUST_ENV = os.getenv('WEB_SEARCH_TRUST_ENV', 'True').lower() == 'true'
 
@@ -1225,7 +1284,9 @@ SERPAPI_API_KEY = os.getenv('SERPAPI_API_KEY', '')
 
 SERPAPI_ENGINE = os.getenv('SERPAPI_ENGINE', '')
 
-BING_SEARCH_V7_ENDPOINT = os.getenv('BING_SEARCH_V7_ENDPOINT', 'https://api.bing.microsoft.com/v7.0/search')
+BING_SEARCH_V7_ENDPOINT = os.getenv(
+    'BING_SEARCH_V7_ENDPOINT', 'https://api.bing.microsoft.com/v7.0/search'
+)
 
 BING_SEARCH_V7_SUBSCRIPTION_KEY = os.getenv('BING_SEARCH_V7_SUBSCRIPTION_KEY', '')
 
@@ -1243,9 +1304,13 @@ PERPLEXITY_MODEL = os.getenv('PERPLEXITY_MODEL', 'sonar')
 
 PERPLEXITY_SEARCH_CONTEXT_USAGE = os.getenv('PERPLEXITY_SEARCH_CONTEXT_USAGE', 'medium')
 
-PERPLEXITY_SEARCH_API_URL = os.getenv('PERPLEXITY_SEARCH_API_URL', 'https://api.perplexity.ai/search')
+PERPLEXITY_SEARCH_API_URL = os.getenv(
+    'PERPLEXITY_SEARCH_API_URL', 'https://api.perplexity.ai/search'
+)
 
-MICROSOFT_WEB_IQ_API_BASE_URL = os.getenv('MICROSOFT_WEB_IQ_API_BASE_URL', 'https://api.microsoft.ai/v3')
+MICROSOFT_WEB_IQ_API_BASE_URL = os.getenv(
+    'MICROSOFT_WEB_IQ_API_BASE_URL', 'https://api.microsoft.ai/v3'
+)
 
 MICROSOFT_WEB_IQ_API_KEY = os.getenv('MICROSOFT_WEB_IQ_API_KEY', '')
 
@@ -1306,16 +1371,22 @@ IMAGE_GENERATION_ENGINE = os.getenv('IMAGE_GENERATION_ENGINE', 'openai')
 IMAGE_GENERATION_MODEL = os.getenv('IMAGE_GENERATION_MODEL', '')
 
 # Regex pattern for models that support IMAGE_SIZE = "auto".
-IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN = os.getenv('IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN', '^gpt-image')
+IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN = os.getenv(
+    'IMAGE_AUTO_SIZE_MODELS_REGEX_PATTERN', '^gpt-image'
+)
 
 # Regex pattern for models that return URLs instead of base64 data.
-IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN = os.getenv('IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN', '^gpt-image')
+IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN = os.getenv(
+    'IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN', '^gpt-image'
+)
 
 IMAGE_SIZE = os.getenv('IMAGE_SIZE', '512x512')
 
 IMAGE_STEPS = int(os.getenv('IMAGE_STEPS', 50))
 
-ENABLE_IMAGE_PROMPT_GENERATION = os.getenv('ENABLE_IMAGE_PROMPT_GENERATION', 'true').lower() == 'true'
+ENABLE_IMAGE_PROMPT_GENERATION = (
+    os.getenv('ENABLE_IMAGE_PROMPT_GENERATION', 'true').lower() == 'true'
+)
 
 AUTOMATIC1111_BASE_URL = os.getenv('AUTOMATIC1111_BASE_URL', '')
 AUTOMATIC1111_API_AUTH = os.getenv('AUTOMATIC1111_API_AUTH', '')
@@ -1481,7 +1552,9 @@ IMAGE_EDIT_MODEL = os.getenv('IMAGE_EDIT_MODEL', '')
 
 IMAGE_EDIT_SIZE = os.getenv('IMAGE_EDIT_SIZE', '')
 
-ENABLE_OPENAI_IMAGE_EDIT_NORMALIZATION = os.getenv('ENABLE_OPENAI_IMAGE_EDIT_NORMALIZATION', 'true').lower() == 'true'
+ENABLE_OPENAI_IMAGE_EDIT_NORMALIZATION = (
+    os.getenv('ENABLE_OPENAI_IMAGE_EDIT_NORMALIZATION', 'true').lower() == 'true'
+)
 
 IMAGES_EDIT_OPENAI_API_BASE_URL = os.getenv('IMAGES_EDIT_OPENAI_API_BASE_URL', OPENAI_API_BASE_URL)
 IMAGES_EDIT_OPENAI_API_VERSION = os.getenv('IMAGES_EDIT_OPENAI_API_VERSION', '')
@@ -1514,7 +1587,9 @@ WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'base')
 
 WHISPER_COMPUTE_TYPE = os.getenv('WHISPER_COMPUTE_TYPE', 'int8')
 WHISPER_MODEL_DIR = os.getenv('WHISPER_MODEL_DIR', f'{CACHE_DIR}/whisper/models')
-WHISPER_MODEL_AUTO_UPDATE = not OFFLINE_MODE and os.getenv('WHISPER_MODEL_AUTO_UPDATE', '').lower() == 'true'
+WHISPER_MODEL_AUTO_UPDATE = (
+    not OFFLINE_MODE and os.getenv('WHISPER_MODEL_AUTO_UPDATE', '').lower() == 'true'
+)
 
 WHISPER_VAD_FILTER = os.getenv('WHISPER_VAD_FILTER', 'False').lower() == 'true'
 
@@ -1565,9 +1640,13 @@ AUDIO_STT_AZURE_MAX_SPEAKERS = os.getenv('AUDIO_STT_AZURE_MAX_SPEAKERS', '')
 
 AUDIO_STT_MISTRAL_API_KEY = os.getenv('AUDIO_STT_MISTRAL_API_KEY', '')
 
-AUDIO_STT_MISTRAL_API_BASE_URL = os.getenv('AUDIO_STT_MISTRAL_API_BASE_URL', 'https://api.mistral.ai/v1')
+AUDIO_STT_MISTRAL_API_BASE_URL = os.getenv(
+    'AUDIO_STT_MISTRAL_API_BASE_URL', 'https://api.mistral.ai/v1'
+)
 
-AUDIO_STT_MISTRAL_USE_CHAT_COMPLETIONS = os.getenv('AUDIO_STT_MISTRAL_USE_CHAT_COMPLETIONS', 'false').lower() == 'true'
+AUDIO_STT_MISTRAL_USE_CHAT_COMPLETIONS = (
+    os.getenv('AUDIO_STT_MISTRAL_USE_CHAT_COMPLETIONS', 'false').lower() == 'true'
+)
 
 AUDIO_TTS_OPENAI_API_BASE_URL = os.getenv('AUDIO_TTS_OPENAI_API_BASE_URL', OPENAI_API_BASE_URL)
 AUDIO_TTS_OPENAI_API_KEY = os.getenv('AUDIO_TTS_OPENAI_API_KEY', OPENAI_API_KEY)
@@ -1602,7 +1681,9 @@ AUDIO_TTS_AZURE_SPEECH_OUTPUT_FORMAT = os.getenv(
 
 AUDIO_TTS_MISTRAL_API_KEY = os.getenv('AUDIO_TTS_MISTRAL_API_KEY', '')
 
-AUDIO_TTS_MISTRAL_API_BASE_URL = os.getenv('AUDIO_TTS_MISTRAL_API_BASE_URL', 'https://api.mistral.ai/v1')
+AUDIO_TTS_MISTRAL_API_BASE_URL = os.getenv(
+    'AUDIO_TTS_MISTRAL_API_BASE_URL', 'https://api.mistral.ai/v1'
+)
 
 ####################################
 # WEBUI
@@ -1761,7 +1842,8 @@ USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ALLOW_SHARING = (
 )
 
 USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ALLOW_PUBLIC_SHARING = (
-    os.getenv('USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ALLOW_PUBLIC_SHARING', 'False').lower() == 'true'
+    os.getenv('USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ALLOW_PUBLIC_SHARING', 'False').lower()
+    == 'true'
 )
 
 USER_PERMISSIONS_WORKSPACE_PROMPTS_ALLOW_SHARING = (
@@ -1790,13 +1872,17 @@ USER_PERMISSIONS_WORKSPACE_SKILLS_ALLOW_PUBLIC_SHARING = (
 )
 
 
-USER_PERMISSIONS_NOTES_ALLOW_SHARING = os.getenv('USER_PERMISSIONS_NOTES_ALLOW_SHARING', 'False').lower() == 'true'
+USER_PERMISSIONS_NOTES_ALLOW_SHARING = (
+    os.getenv('USER_PERMISSIONS_NOTES_ALLOW_SHARING', 'False').lower() == 'true'
+)
 
 USER_PERMISSIONS_NOTES_ALLOW_PUBLIC_SHARING = (
     os.getenv('USER_PERMISSIONS_NOTES_ALLOW_PUBLIC_SHARING', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_FOLDERS_ALLOW_SHARING = os.getenv('USER_PERMISSIONS_FOLDERS_ALLOW_SHARING', 'False').lower() == 'true'
+USER_PERMISSIONS_FOLDERS_ALLOW_SHARING = (
+    os.getenv('USER_PERMISSIONS_FOLDERS_ALLOW_SHARING', 'False').lower() == 'true'
+)
 
 
 USER_PERMISSIONS_CALENDAR_ALLOW_PUBLIC_SHARING = (
@@ -1808,29 +1894,43 @@ USER_PERMISSIONS_ACCESS_GRANTS_ALLOW_USERS = (
 )
 
 
-USER_PERMISSIONS_CHAT_CONTROLS = os.getenv('USER_PERMISSIONS_CHAT_CONTROLS', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_CONTROLS = (
+    os.getenv('USER_PERMISSIONS_CHAT_CONTROLS', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_CHAT_VALVES = os.getenv('USER_PERMISSIONS_CHAT_VALVES', 'True').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_SYSTEM_PROMPT = os.getenv('USER_PERMISSIONS_CHAT_SYSTEM_PROMPT', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_SYSTEM_PROMPT = (
+    os.getenv('USER_PERMISSIONS_CHAT_SYSTEM_PROMPT', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_CHAT_PARAMS = os.getenv('USER_PERMISSIONS_CHAT_PARAMS', 'True').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_FILE_UPLOAD = os.getenv('USER_PERMISSIONS_CHAT_FILE_UPLOAD', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_FILE_UPLOAD = (
+    os.getenv('USER_PERMISSIONS_CHAT_FILE_UPLOAD', 'True').lower() == 'true'
+)
 
-USER_PERMISSIONS_CHAT_WEB_UPLOAD = os.getenv('USER_PERMISSIONS_CHAT_WEB_UPLOAD', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_WEB_UPLOAD = (
+    os.getenv('USER_PERMISSIONS_CHAT_WEB_UPLOAD', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_CHAT_DELETE = os.getenv('USER_PERMISSIONS_CHAT_DELETE', 'True').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_DELETE_MESSAGE = os.getenv('USER_PERMISSIONS_CHAT_DELETE_MESSAGE', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_DELETE_MESSAGE = (
+    os.getenv('USER_PERMISSIONS_CHAT_DELETE_MESSAGE', 'True').lower() == 'true'
+)
 
-USER_PERMISSIONS_CHAT_CONTINUE_RESPONSE = os.getenv('USER_PERMISSIONS_CHAT_CONTINUE_RESPONSE', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_CONTINUE_RESPONSE = (
+    os.getenv('USER_PERMISSIONS_CHAT_CONTINUE_RESPONSE', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_CHAT_REGENERATE_RESPONSE = (
     os.getenv('USER_PERMISSIONS_CHAT_REGENERATE_RESPONSE', 'True').lower() == 'true'
 )
 
-USER_PERMISSIONS_CHAT_RATE_RESPONSE = os.getenv('USER_PERMISSIONS_CHAT_RATE_RESPONSE', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_RATE_RESPONSE = (
+    os.getenv('USER_PERMISSIONS_CHAT_RATE_RESPONSE', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_CHAT_EDIT = os.getenv('USER_PERMISSIONS_CHAT_EDIT', 'True').lower() == 'true'
 
@@ -1850,9 +1950,13 @@ USER_PERMISSIONS_CHAT_TTS = os.getenv('USER_PERMISSIONS_CHAT_TTS', 'True').lower
 
 USER_PERMISSIONS_CHAT_CALL = os.getenv('USER_PERMISSIONS_CHAT_CALL', 'True').lower() == 'true'
 
-USER_PERMISSIONS_CHAT_MULTIPLE_MODELS = os.getenv('USER_PERMISSIONS_CHAT_MULTIPLE_MODELS', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_MULTIPLE_MODELS = (
+    os.getenv('USER_PERMISSIONS_CHAT_MULTIPLE_MODELS', 'True').lower() == 'true'
+)
 
-USER_PERMISSIONS_CHAT_TEMPORARY = os.getenv('USER_PERMISSIONS_CHAT_TEMPORARY', 'True').lower() == 'true'
+USER_PERMISSIONS_CHAT_TEMPORARY = (
+    os.getenv('USER_PERMISSIONS_CHAT_TEMPORARY', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_CHAT_TEMPORARY_ENFORCED = (
     os.getenv('USER_PERMISSIONS_CHAT_TEMPORARY_ENFORCED', 'False').lower() == 'true'
@@ -1863,7 +1967,9 @@ USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS = (
     os.getenv('USER_PERMISSIONS_FEATURES_DIRECT_TOOL_SERVERS', 'False').lower() == 'true'
 )
 
-USER_PERMISSIONS_FEATURES_WEB_SEARCH = os.getenv('USER_PERMISSIONS_FEATURES_WEB_SEARCH', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_WEB_SEARCH = (
+    os.getenv('USER_PERMISSIONS_FEATURES_WEB_SEARCH', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_FEATURES_IMAGE_GENERATION = (
     os.getenv('USER_PERMISSIONS_FEATURES_IMAGE_GENERATION', 'True').lower() == 'true'
@@ -1873,26 +1979,42 @@ USER_PERMISSIONS_FEATURES_CODE_INTERPRETER = (
     os.getenv('USER_PERMISSIONS_FEATURES_CODE_INTERPRETER', 'True').lower() == 'true'
 )
 
-USER_PERMISSIONS_FEATURES_FOLDERS = os.getenv('USER_PERMISSIONS_FEATURES_FOLDERS', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_FOLDERS = (
+    os.getenv('USER_PERMISSIONS_FEATURES_FOLDERS', 'True').lower() == 'true'
+)
 
-USER_PERMISSIONS_FEATURES_NOTES = os.getenv('USER_PERMISSIONS_FEATURES_NOTES', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_NOTES = (
+    os.getenv('USER_PERMISSIONS_FEATURES_NOTES', 'True').lower() == 'true'
+)
 
-USER_PERMISSIONS_FEATURES_CHANNELS = os.getenv('USER_PERMISSIONS_FEATURES_CHANNELS', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_CHANNELS = (
+    os.getenv('USER_PERMISSIONS_FEATURES_CHANNELS', 'True').lower() == 'true'
+)
 
-USER_PERMISSIONS_FEATURES_API_KEYS = os.getenv('USER_PERMISSIONS_FEATURES_API_KEYS', 'False').lower() == 'true'
+USER_PERMISSIONS_FEATURES_API_KEYS = (
+    os.getenv('USER_PERMISSIONS_FEATURES_API_KEYS', 'False').lower() == 'true'
+)
 
-USER_PERMISSIONS_FEATURES_MEMORIES = os.getenv('USER_PERMISSIONS_FEATURES_MEMORIES', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_MEMORIES = (
+    os.getenv('USER_PERMISSIONS_FEATURES_MEMORIES', 'True').lower() == 'true'
+)
 
-USER_PERMISSIONS_FEATURES_AUTOMATIONS = os.getenv('USER_PERMISSIONS_FEATURES_AUTOMATIONS', 'False').lower() == 'true'
+USER_PERMISSIONS_FEATURES_AUTOMATIONS = (
+    os.getenv('USER_PERMISSIONS_FEATURES_AUTOMATIONS', 'False').lower() == 'true'
+)
 
-USER_PERMISSIONS_FEATURES_CALENDAR = os.getenv('USER_PERMISSIONS_FEATURES_CALENDAR', 'True').lower() == 'true'
+USER_PERMISSIONS_FEATURES_CALENDAR = (
+    os.getenv('USER_PERMISSIONS_FEATURES_CALENDAR', 'True').lower() == 'true'
+)
 
 USER_PERMISSIONS_FEATURES_USER_WEBHOOKS = (
     os.getenv('USER_PERMISSIONS_FEATURES_USER_WEBHOOKS', 'False').lower() == 'true'
 )
 
 
-USER_PERMISSIONS_SETTINGS_INTERFACE = os.getenv('USER_PERMISSIONS_SETTINGS_INTERFACE', 'True').lower() == 'true'
+USER_PERMISSIONS_SETTINGS_INTERFACE = (
+    os.getenv('USER_PERMISSIONS_SETTINGS_INTERFACE', 'True').lower() == 'true'
+)
 
 
 DEFAULT_USER_PERMISSIONS = {
@@ -1997,7 +2119,9 @@ ENABLE_NOTES = os.getenv('ENABLE_NOTES', 'True').lower() == 'true'
 
 ENABLE_USER_STATUS = os.getenv('ENABLE_USER_STATUS', 'True').lower() == 'true'
 
-ENABLE_EVALUATION_ARENA_MODELS = os.getenv('ENABLE_EVALUATION_ARENA_MODELS', 'True').lower() == 'true'
+ENABLE_EVALUATION_ARENA_MODELS = (
+    os.getenv('ENABLE_EVALUATION_ARENA_MODELS', 'True').lower() == 'true'
+)
 try:
     evaluation_arena_models = json.loads(os.getenv('EVALUATION_ARENA_MODELS', '[]'))
     if not isinstance(evaluation_arena_models, list) or not all(
@@ -2024,7 +2148,9 @@ WEBHOOK_URL = os.getenv('WEBHOOK_URL', '')
 
 ENABLE_ADMIN_EXPORT = os.getenv('ENABLE_ADMIN_EXPORT', 'True').lower() == 'true'
 
-ENABLE_ADMIN_WORKSPACE_CONTENT_ACCESS = os.getenv('ENABLE_ADMIN_WORKSPACE_CONTENT_ACCESS', 'True').lower() == 'true'
+ENABLE_ADMIN_WORKSPACE_CONTENT_ACCESS = (
+    os.getenv('ENABLE_ADMIN_WORKSPACE_CONTENT_ACCESS', 'True').lower() == 'true'
+)
 
 BYPASS_ADMIN_ACCESS_CONTROL = (
     os.getenv(
@@ -2051,7 +2177,9 @@ if THREAD_POOL_SIZE is not None and isinstance(THREAD_POOL_SIZE, str):
     try:
         THREAD_POOL_SIZE = int(THREAD_POOL_SIZE)
     except ValueError:
-        log.warning(f'THREAD_POOL_SIZE is not a valid integer: {THREAD_POOL_SIZE}. Defaulting to None.')
+        log.warning(
+            f'THREAD_POOL_SIZE is not a valid integer: {THREAD_POOL_SIZE}. Defaulting to None.'
+        )
         THREAD_POOL_SIZE = None
 
 
@@ -2083,7 +2211,9 @@ CORS_ALLOW_ORIGIN = os.getenv('CORS_ALLOW_ORIGIN', '*').split(';')
 CORS_ALLOW_CUSTOM_SCHEME = os.getenv('CORS_ALLOW_CUSTOM_SCHEME', '').split(';')
 
 if CORS_ALLOW_ORIGIN == ['*']:
-    log.warning("\n\nWARNING: CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS.\n")
+    log.warning(
+        "\n\nWARNING: CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS.\n"
+    )
 else:
     # You have to pick between a single wildcard or a list of origins.
     # Doing both will result in CORS errors in the browser.
@@ -2224,9 +2354,13 @@ ENABLE_TAGS_GENERATION = os.getenv('ENABLE_TAGS_GENERATION', 'True').lower() == 
 ENABLE_TITLE_GENERATION = os.getenv('ENABLE_TITLE_GENERATION', 'True').lower() == 'true'
 
 
-ENABLE_SEARCH_QUERY_GENERATION = os.getenv('ENABLE_SEARCH_QUERY_GENERATION', 'True').lower() == 'true'
+ENABLE_SEARCH_QUERY_GENERATION = (
+    os.getenv('ENABLE_SEARCH_QUERY_GENERATION', 'True').lower() == 'true'
+)
 
-ENABLE_RETRIEVAL_QUERY_GENERATION = os.getenv('ENABLE_RETRIEVAL_QUERY_GENERATION', 'True').lower() == 'true'
+ENABLE_RETRIEVAL_QUERY_GENERATION = (
+    os.getenv('ENABLE_RETRIEVAL_QUERY_GENERATION', 'True').lower() == 'true'
+)
 
 
 QUERY_GENERATION_PROMPT_TEMPLATE = os.getenv('QUERY_GENERATION_PROMPT_TEMPLATE', '')
@@ -2255,9 +2389,13 @@ Strictly return in JSON format:
 </chat_history>
 """
 
-ENABLE_AUTOCOMPLETE_GENERATION = os.getenv('ENABLE_AUTOCOMPLETE_GENERATION', 'False').lower() == 'true'
+ENABLE_AUTOCOMPLETE_GENERATION = (
+    os.getenv('ENABLE_AUTOCOMPLETE_GENERATION', 'False').lower() == 'true'
+)
 
-AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = int(os.getenv('AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH', '-1'))
+AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH = int(
+    os.getenv('AUTOCOMPLETE_GENERATION_INPUT_MAX_LENGTH', '-1')
+)
 
 AUTOCOMPLETE_GENERATION_PROMPT_TEMPLATE = os.getenv('AUTOCOMPLETE_GENERATION_PROMPT_TEMPLATE', '')
 
@@ -2386,7 +2524,9 @@ ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS = (
     == 'true'
 )
 
-API_KEYS_ALLOWED_ENDPOINTS = os.getenv('API_KEYS_ALLOWED_ENDPOINTS', os.getenv('API_KEY_ALLOWED_ENDPOINTS', ''))
+API_KEYS_ALLOWED_ENDPOINTS = os.getenv(
+    'API_KEYS_ALLOWED_ENDPOINTS', os.getenv('API_KEY_ALLOWED_ENDPOINTS', '')
+)
 
 JWT_EXPIRES_IN = os.getenv('JWT_EXPIRES_IN', '4w')
 
@@ -2404,10 +2544,14 @@ ENABLE_OAUTH_SIGNUP = os.getenv('ENABLE_OAUTH_SIGNUP', 'False').lower() == 'true
 
 OAUTH_AUTO_REDIRECT = os.getenv('OAUTH_AUTO_REDIRECT', 'False').lower() == 'true'
 
-OAUTH_REFRESH_TOKEN_INCLUDE_SCOPE = os.getenv('OAUTH_REFRESH_TOKEN_INCLUDE_SCOPE', 'False').lower() == 'true'
+OAUTH_REFRESH_TOKEN_INCLUDE_SCOPE = (
+    os.getenv('OAUTH_REFRESH_TOKEN_INCLUDE_SCOPE', 'False').lower() == 'true'
+)
 
 
-OAUTH_MERGE_ACCOUNTS_BY_EMAIL = os.getenv('OAUTH_MERGE_ACCOUNTS_BY_EMAIL', 'False').lower() == 'true'
+OAUTH_MERGE_ACCOUNTS_BY_EMAIL = (
+    os.getenv('OAUTH_MERGE_ACCOUNTS_BY_EMAIL', 'False').lower() == 'true'
+)
 
 OAUTH_PROVIDERS = {}
 
@@ -2438,7 +2582,9 @@ MICROSOFT_CLIENT_SECRET = os.getenv('MICROSOFT_CLIENT_SECRET', '')
 
 MICROSOFT_CLIENT_TENANT_ID = os.getenv('MICROSOFT_CLIENT_TENANT_ID', '')
 
-MICROSOFT_CLIENT_LOGIN_BASE_URL = os.getenv('MICROSOFT_CLIENT_LOGIN_BASE_URL', 'https://login.microsoftonline.com')
+MICROSOFT_CLIENT_LOGIN_BASE_URL = os.getenv(
+    'MICROSOFT_CLIENT_LOGIN_BASE_URL', 'https://login.microsoftonline.com'
+)
 
 MICROSOFT_CLIENT_PICTURE_URL = os.getenv(
     'MICROSOFT_CLIENT_PICTURE_URL',
@@ -2499,13 +2645,17 @@ FEISHU_REDIRECT_URI = os.getenv('FEISHU_REDIRECT_URI', '')
 
 ENABLE_OAUTH_ROLE_MANAGEMENT = os.getenv('ENABLE_OAUTH_ROLE_MANAGEMENT', 'False').lower() == 'true'
 
-ENABLE_OAUTH_GROUP_MANAGEMENT = os.getenv('ENABLE_OAUTH_GROUP_MANAGEMENT', 'False').lower() == 'true'
+ENABLE_OAUTH_GROUP_MANAGEMENT = (
+    os.getenv('ENABLE_OAUTH_GROUP_MANAGEMENT', 'False').lower() == 'true'
+)
 
 ENABLE_OAUTH_GROUP_CREATION = os.getenv('ENABLE_OAUTH_GROUP_CREATION', 'False').lower() == 'true'
 
 
 oauth_group_default_share = os.getenv('OAUTH_GROUP_DEFAULT_SHARE', 'true').strip().lower()
-OAUTH_GROUP_DEFAULT_SHARE = 'members' if oauth_group_default_share == 'members' else oauth_group_default_share == 'true'
+OAUTH_GROUP_DEFAULT_SHARE = (
+    'members' if oauth_group_default_share == 'members' else oauth_group_default_share == 'true'
+)
 
 
 OAUTH_BLOCKED_GROUPS = os.getenv('OAUTH_BLOCKED_GROUPS', '[]')
@@ -2518,17 +2668,25 @@ OAUTH_ROLES_SEPARATOR = os.getenv('OAUTH_ROLES_SEPARATOR', ',')
 
 OAUTH_ALLOWED_ROLES = [
     role.strip()
-    for role in os.getenv('OAUTH_ALLOWED_ROLES', f'user{OAUTH_ROLES_SEPARATOR}admin').split(OAUTH_ROLES_SEPARATOR)
+    for role in os.getenv('OAUTH_ALLOWED_ROLES', f'user{OAUTH_ROLES_SEPARATOR}admin').split(
+        OAUTH_ROLES_SEPARATOR
+    )
     if role
 ]
 
 OAUTH_ADMIN_ROLES = [
-    role.strip() for role in os.getenv('OAUTH_ADMIN_ROLES', 'admin').split(OAUTH_ROLES_SEPARATOR) if role
+    role.strip()
+    for role in os.getenv('OAUTH_ADMIN_ROLES', 'admin').split(OAUTH_ROLES_SEPARATOR)
+    if role
 ]
 
-OAUTH_ALLOWED_DOMAINS = [domain.strip() for domain in os.getenv('OAUTH_ALLOWED_DOMAINS', '*').split(',')]
+OAUTH_ALLOWED_DOMAINS = [
+    domain.strip() for domain in os.getenv('OAUTH_ALLOWED_DOMAINS', '*').split(',')
+]
 
-OAUTH_UPDATE_PICTURE_ON_LOGIN = os.getenv('OAUTH_UPDATE_PICTURE_ON_LOGIN', 'False').lower() == 'true'
+OAUTH_UPDATE_PICTURE_ON_LOGIN = (
+    os.getenv('OAUTH_UPDATE_PICTURE_ON_LOGIN', 'False').lower() == 'true'
+)
 
 OAUTH_UPDATE_NAME_ON_LOGIN = os.getenv('OAUTH_UPDATE_NAME_ON_LOGIN', 'False').lower() == 'true'
 
@@ -2568,7 +2726,11 @@ def load_oauth_providers():
                     **({'timeout': int(OAUTH_TIMEOUT)} if OAUTH_TIMEOUT else {}),
                 },
                 redirect_uri=GOOGLE_REDIRECT_URI,
-                **({'authorize_params': GOOGLE_OAUTH_AUTHORIZE_PARAMS} if GOOGLE_OAUTH_AUTHORIZE_PARAMS else {}),
+                **(
+                    {'authorize_params': GOOGLE_OAUTH_AUTHORIZE_PARAMS}
+                    if GOOGLE_OAUTH_AUTHORIZE_PARAMS
+                    else {}
+                ),
             )
             return client
 
@@ -2621,7 +2783,11 @@ def load_oauth_providers():
             'sub_claim': 'id',
         }
 
-    if OAUTH_CLIENT_ID and (OAUTH_CLIENT_SECRET or OAUTH_CODE_CHALLENGE_METHOD) and OPENID_PROVIDER_URL:
+    if (
+        OAUTH_CLIENT_ID
+        and (OAUTH_CLIENT_SECRET or OAUTH_CODE_CHALLENGE_METHOD)
+        and OPENID_PROVIDER_URL
+    ):
 
         def oidc_oauth_register(oauth: OAuth):
             client_kwargs = {
@@ -2735,6 +2901,8 @@ LDAP_CA_CERT_FILE = os.getenv('LDAP_CA_CERT_FILE', '')
 LDAP_VALIDATE_CERT = os.getenv('LDAP_VALIDATE_CERT', 'True').lower() == 'true'
 
 LDAP_CIPHERS = os.getenv('LDAP_CIPHERS', 'ALL')
+
+LDAP_SERVERS_JSON = json.loads(os.getenv('LDAP_SERVERS_JSON', '[]'))
 
 ENABLE_LDAP_GROUP_MANAGEMENT = os.getenv('ENABLE_LDAP_GROUP_MANAGEMENT', 'False').lower() == 'true'
 
@@ -3120,6 +3288,7 @@ DEFAULT_CONFIG = {
     'ldap.server.ca_cert_file': LDAP_CA_CERT_FILE,
     'ldap.server.validate_cert': LDAP_VALIDATE_CERT,
     'ldap.server.ciphers': LDAP_CIPHERS,
+    'ldap.servers': LDAP_SERVERS_JSON,
     'ldap.group.enable_management': ENABLE_LDAP_GROUP_MANAGEMENT,
     'ldap.group.enable_creation': ENABLE_LDAP_GROUP_CREATION,
     'ldap.server.attribute_for_groups': LDAP_ATTRIBUTE_FOR_GROUPS,
@@ -3127,7 +3296,9 @@ DEFAULT_CONFIG = {
 
 
 ENABLE_PERSISTENT_CONFIG = os.getenv('ENABLE_PERSISTENT_CONFIG', 'True').lower() == 'true'
-ENABLE_OAUTH_PERSISTENT_CONFIG = os.getenv('ENABLE_OAUTH_PERSISTENT_CONFIG', 'False').lower() == 'true'
+ENABLE_OAUTH_PERSISTENT_CONFIG = (
+    os.getenv('ENABLE_OAUTH_PERSISTENT_CONFIG', 'False').lower() == 'true'
+)
 
 Config.configure(
     defaults=DEFAULT_CONFIG,
