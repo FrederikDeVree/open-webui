@@ -1,7 +1,7 @@
 """add ldap servers config
 
 Revision ID: 4a1b2c3d4e5f
-Revises: d4e5f6a7b8c9
+Revises: 42e2978c7933
 Create Date: 2026-07-10 00:00:00.000000
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '4a1b2c3d4e5f'
-down_revision: Union[str, None] = 'd4e5f6a7b8c9'
+down_revision: Union[str, None] = '42e2978c7933'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -23,13 +23,22 @@ def upgrade() -> None:
     # Seed the ldap.servers config key with an empty list if it doesn't exist.
     # This is a no-op for existing deployments that already have the key,
     # and ensures the key exists for new installations.
-    op.execute(
-        sa.text(
+    conn = op.get_bind()
+    dialect = conn.dialect.name
+
+    if dialect == 'sqlite':
+        query = (
             "INSERT OR IGNORE INTO config (key, value, updated_at) "
             "VALUES ('ldap.servers', '[]', :now)"
-        ),
-        now=int(time.time()),
-    )
+        )
+    else:
+        query = (
+            "INSERT INTO config (key, value, updated_at) "
+            "VALUES ('ldap.servers', '[]', :now) "
+            "ON CONFLICT (key) DO NOTHING"
+        )
+
+    conn.execute(sa.text(query), {'now': int(time.time())})
 
 
 def downgrade() -> None:
