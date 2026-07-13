@@ -80,6 +80,7 @@ services:
     volumes:
       - /data/backups/open-webui-dev:/backups
       - ./backup-postgres.sh:/usr/local/bin/backup-postgres.sh
+      - ./restore-postgres.sh:/usr/local/bin/restore-postgres.sh
     entrypoint: ["/usr/local/bin/backup-postgres.sh"]
     networks:
       - db-network
