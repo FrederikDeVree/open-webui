@@ -52,6 +52,7 @@
 	import { computeFileHash } from '$lib/utils/hash';
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import Switch from '$lib/components/common/Switch.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Files from './KnowledgeBase/Files.svelte';
 	import AddFilesPlaceholder from '$lib/components/AddFilesPlaceholder.svelte';
