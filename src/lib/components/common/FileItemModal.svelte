@@ -38,7 +38,7 @@
 	// Derive initial toggle state from item context + global file_full_context config
 	$: enableFullContent =
 		item?.context === 'full' ||
-		(item?.type === 'file' && config?.source?.RAG_FILE_FULL_CONTEXT === true);
+		(item?.type === 'file' && $config?.RAG_FILE_FULL_CONTEXT === true);
 
 	let isPDF = false;
 	let isAudio = false;
