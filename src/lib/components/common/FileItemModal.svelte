@@ -6,7 +6,7 @@
 
 	import { formatFileSize, getLineCount } from '$lib/utils';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
-	import { settings } from '$lib/stores';
+	import { settings, config } from '$lib/stores';
 	import { getKnowledgeById } from '$lib/apis/knowledge';
 	import { getFileById, getFileContentById } from '$lib/apis/files';
 
@@ -34,6 +34,11 @@
 
 	let enableFullContent = false;
 	let loading = false;
+
+	// Derive initial toggle state from item context + global file_full_context config
+	$: enableFullContent =
+		item?.context === 'full' ||
+		(item?.type === 'file' && config?.source?.RAG_FILE_FULL_CONTEXT === true);
 
 	let isPDF = false;
 	let isAudio = false;

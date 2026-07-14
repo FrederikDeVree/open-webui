@@ -1274,6 +1274,25 @@
 
 						{#if !RAGConfig.RAG_FULL_CONTEXT}
 							<div class="  mb-2.5 flex w-full justify-between">
+								<div class=" self-center text-xs font-medium">{$i18n.t('File Attachments Default to Full Context')}</div>
+								<div class="flex items-center relative">
+									<Tooltip
+										content={RAGConfig.RAG_FILE_FULL_CONTEXT
+											? $i18n.t(
+													'New file attachments in chat will default to injecting the entire document content. Knowledge base queries will still use focused retrieval.'
+												)
+											: $i18n.t(
+													'New file attachments in chat will use focused retrieval by default. Toggle per-attachment to inject full content.'
+												)}
+									>
+										<Switch bind:state={RAGConfig.RAG_FILE_FULL_CONTEXT} />
+									</Tooltip>
+								</div>
+							</div>
+						{/if}
+
+						{#if !RAGConfig.RAG_FULL_CONTEXT}
+							<div class="  mb-2.5 flex w-full justify-between">
 								<div class=" self-center text-xs font-medium">{$i18n.t('Hybrid Search')}</div>
 								<div class="flex items-center relative">
 									<Switch bind:state={RAGConfig.ENABLE_RAG_HYBRID_SEARCH} />

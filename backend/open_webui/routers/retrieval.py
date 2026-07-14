@@ -633,6 +633,7 @@ async def get_rag_config(request: Request, user=Depends(get_admin_user)):
         'TOP_K': config.TOP_K,
         'BYPASS_EMBEDDING_AND_RETRIEVAL': config.BYPASS_EMBEDDING_AND_RETRIEVAL,
         'RAG_FULL_CONTEXT': config.RAG_FULL_CONTEXT,
+        'RAG_FILE_FULL_CONTEXT': config.RAG_FILE_FULL_CONTEXT,
         # Hybrid search settings
         'ENABLE_RAG_HYBRID_SEARCH': config.ENABLE_RAG_HYBRID_SEARCH,
         'ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS': config.ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS,
@@ -1398,6 +1399,7 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         'TOP_K': config.TOP_K,
         'BYPASS_EMBEDDING_AND_RETRIEVAL': config.BYPASS_EMBEDDING_AND_RETRIEVAL,
         'RAG_FULL_CONTEXT': config.RAG_FULL_CONTEXT,
+        'RAG_FILE_FULL_CONTEXT': config.RAG_FILE_FULL_CONTEXT,
         # Hybrid search settings
         'ENABLE_RAG_HYBRID_SEARCH': config.ENABLE_RAG_HYBRID_SEARCH,
         'TOP_K_RERANKER': config.TOP_K_RERANKER,

@@ -286,6 +286,8 @@ type Config = {
 	default_locale: string;
 	default_models: string;
 	default_prompt_suggestions: PromptSuggestion[];
+	RAG_FULL_CONTEXT?: boolean;
+	RAG_FILE_FULL_CONTEXT?: boolean;
 	features: {
 		auth: boolean;
 		auth_trusted_header: boolean;
