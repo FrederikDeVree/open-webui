@@ -929,6 +929,14 @@
 		}
 	};
 
+	let kbFullContext = false;
+
+	$: kbFullContext = (knowledge?.meta?.context ?? '') === 'full';
+
+	$: if (knowledge) {
+		knowledge.meta = { ...(knowledge.meta || {}), context: kbFullContext ? 'full' : undefined };
+	}
+
 	const changeDebounceHandler = () => {
 		console.log('debounce');
 		if (debounceTimeout) {
@@ -1320,15 +1328,14 @@
 							</div>
 							<div class="flex items-center gap-2">
 								<span class="text-xs text-gray-500">
-									{knowledge?.meta?.context === 'full'
+									{kbFullContext
 										? $i18n.t('Full Context')
 										: $i18n.t('Focused Retrieval')}
 								</span>
 								<Switch
-									bind:state={knowledge.meta?.context === 'full'}
+									bind:state={kbFullContext}
 									on:change={async (e) => {
-										const isFull = e.detail;
-										knowledge.meta = { ...(knowledge.meta || {}), context: isFull ? 'full' : undefined };
+										kbFullContext = e.detail;
 										changeDebounceHandler();
 									}}
 								/>
