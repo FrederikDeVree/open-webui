@@ -992,6 +992,9 @@ ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS = (
 
 RAG_FULL_CONTEXT = os.getenv('RAG_FULL_CONTEXT', 'False').lower() == 'true'
 
+# Default full-context mode for file attachments in chat (separate from KB retrieval)
+RAG_FILE_FULL_CONTEXT = os.getenv('RAG_FILE_FULL_CONTEXT', 'True').lower() == 'true'
+
 RAG_FILE_MAX_COUNT = (
     int(os.getenv('RAG_FILE_MAX_COUNT')) if os.getenv('RAG_FILE_MAX_COUNT') else None
 )
@@ -2991,6 +2994,7 @@ DEFAULT_CONFIG = {
     'rag.enable_hybrid_search': ENABLE_RAG_HYBRID_SEARCH,
     'rag.enable_hybrid_search_enriched_texts': ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS,
     'rag.full_context': RAG_FULL_CONTEXT,
+    'rag.file_full_context': RAG_FILE_FULL_CONTEXT,
     'rag.file.max_count': RAG_FILE_MAX_COUNT,
     'rag.file.max_size': RAG_FILE_MAX_SIZE,
     'file.image_compression_width': FILE_IMAGE_COMPRESSION_WIDTH,

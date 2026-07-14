@@ -2042,6 +2042,15 @@ async def chat_completion_files_handler(
         # Check if all files are in full context mode
         all_full_context = all(item.get('context') == 'full' for item in files)
 
+        # Apply per-type defaults: file attachments honour RAG_FILE_FULL_CONTEXT
+        # while knowledge bases always use embeddings unless explicitly toggled.
+        if not all_full_context:
+            file_default_full = await Config.get('rag.file_full_context')
+            for item in files:
+                if item.get('type') == 'file' and item.get('context') is None and file_default_full:
+                    item['context'] = 'full'
+                    all_full_context = all(it.get('context') == 'full' for it in files)
+
         queries = []
         if not all_full_context:
             try:

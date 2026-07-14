@@ -228,9 +228,13 @@ def get_rf(
                             eos = getattr(cfg, 'eos_token_id', None)
                             if eos is not None:
                                 cfg.pad_token_id = eos
-                                log.debug(f'Missing pad_token_id detected; set to eos_token_id={eos}')
+                                log.debug(
+                                    f'Missing pad_token_id detected; set to eos_token_id={eos}'
+                                )
                             else:
-                                log.warning('Neither pad_token_id nor eos_token_id present in model config')
+                                log.warning(
+                                    'Neither pad_token_id nor eos_token_id present in model config'
+                                )
                 except Exception as e2:
                     log.warning(f'Failed to adjust pad_token_id on CrossEncoder: {e2}')
 
@@ -350,6 +354,7 @@ RETRIEVAL_CONFIG_KEYS = {
     'RAG_EXTERNAL_RERANKER_TIMEOUT': 'rag.external_reranker_timeout',
     'RAG_EXTERNAL_RERANKER_URL': 'rag.external_reranker_url',
     'RAG_FULL_CONTEXT': 'rag.full_context',
+    'RAG_FILE_FULL_CONTEXT': 'rag.file_full_context',
     'RAG_OLLAMA_API_KEY': 'rag.ollama.api_key',
     'RAG_OLLAMA_BASE_URL': 'rag.ollama.base_url',
     'RAG_OPENAI_API_BASE_URL': 'rag.openai.api_base_url',
@@ -424,7 +429,11 @@ class RetrievalConfig(SimpleNamespace):
 
 async def get_config_values(key_map: dict[str, str]) -> dict:
     values = await Config.get_many(*key_map.values())
-    return {field: values[storage_key] for field, storage_key in key_map.items() if storage_key in values}
+    return {
+        field: values[storage_key]
+        for field, storage_key in key_map.items()
+        if storage_key in values
+    }
 
 
 async def get_retrieval_config() -> RetrievalConfig:
@@ -513,9 +522,13 @@ async def unload_embedding_model(request: Request):
 
 
 @router.post('/embedding/update')
-async def update_embedding_config(request: Request, form_data: EmbeddingModelUpdateForm, user=Depends(get_admin_user)):
+async def update_embedding_config(
+    request: Request, form_data: EmbeddingModelUpdateForm, user=Depends(get_admin_user)
+):
     config = await get_retrieval_config()
-    log.info(f'Updating embedding model: {config.RAG_EMBEDDING_MODEL} to {form_data.RAG_EMBEDDING_MODEL}')
+    log.info(
+        f'Updating embedding model: {config.RAG_EMBEDDING_MODEL} to {form_data.RAG_EMBEDDING_MODEL}'
+    )
     await unload_embedding_model(request)
     try:
         config.RAG_EMBEDDING_ENGINE = form_data.RAG_EMBEDDING_ENGINE
@@ -571,7 +584,9 @@ async def update_embedding_config(request: Request, form_data: EmbeddingModelUpd
             ),
             config.RAG_EMBEDDING_BATCH_SIZE,
             azure_api_version=(
-                config.RAG_AZURE_OPENAI_API_VERSION if config.RAG_EMBEDDING_ENGINE == 'azure_openai' else None
+                config.RAG_AZURE_OPENAI_API_VERSION
+                if config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+                else None
             ),
             enable_async=config.ENABLE_ASYNC_EMBEDDING,
             concurrent_requests=config.RAG_EMBEDDING_CONCURRENT_REQUESTS,
@@ -845,6 +860,7 @@ class ConfigForm(BaseModel):
     TOP_K: int | None = None
     BYPASS_EMBEDDING_AND_RETRIEVAL: bool | None = None
     RAG_FULL_CONTEXT: bool | None = None
+    RAG_FILE_FULL_CONTEXT: bool | None = None
 
     # Hybrid search settings
     ENABLE_RAG_HYBRID_SEARCH: bool | None = None
@@ -930,7 +946,9 @@ class ConfigForm(BaseModel):
 async def update_rag_config(request: Request, form_data: ConfigForm, user=Depends(get_admin_user)):
     # RAG settings
     config = await get_retrieval_config()
-    config.RAG_TEMPLATE = form_data.RAG_TEMPLATE if form_data.RAG_TEMPLATE is not None else config.RAG_TEMPLATE
+    config.RAG_TEMPLATE = (
+        form_data.RAG_TEMPLATE if form_data.RAG_TEMPLATE is not None else config.RAG_TEMPLATE
+    )
     config.TOP_K = form_data.TOP_K if form_data.TOP_K is not None else config.TOP_K
     config.BYPASS_EMBEDDING_AND_RETRIEVAL = (
         form_data.BYPASS_EMBEDDING_AND_RETRIEVAL
@@ -938,7 +956,14 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         else config.BYPASS_EMBEDDING_AND_RETRIEVAL
     )
     config.RAG_FULL_CONTEXT = (
-        form_data.RAG_FULL_CONTEXT if form_data.RAG_FULL_CONTEXT is not None else config.RAG_FULL_CONTEXT
+        form_data.RAG_FULL_CONTEXT
+        if form_data.RAG_FULL_CONTEXT is not None
+        else config.RAG_FULL_CONTEXT
+    )
+    config.RAG_FILE_FULL_CONTEXT = (
+        form_data.RAG_FILE_FULL_CONTEXT
+        if form_data.RAG_FILE_FULL_CONTEXT is not None
+        else config.RAG_FILE_FULL_CONTEXT
     )
 
     # Hybrid search settings
@@ -953,12 +978,18 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         else config.ENABLE_RAG_HYBRID_SEARCH_ENRICHED_TEXTS
     )
 
-    config.TOP_K_RERANKER = form_data.TOP_K_RERANKER if form_data.TOP_K_RERANKER is not None else config.TOP_K_RERANKER
+    config.TOP_K_RERANKER = (
+        form_data.TOP_K_RERANKER if form_data.TOP_K_RERANKER is not None else config.TOP_K_RERANKER
+    )
     config.RELEVANCE_THRESHOLD = (
-        form_data.RELEVANCE_THRESHOLD if form_data.RELEVANCE_THRESHOLD is not None else config.RELEVANCE_THRESHOLD
+        form_data.RELEVANCE_THRESHOLD
+        if form_data.RELEVANCE_THRESHOLD is not None
+        else config.RELEVANCE_THRESHOLD
     )
     config.HYBRID_BM25_WEIGHT = (
-        form_data.HYBRID_BM25_WEIGHT if form_data.HYBRID_BM25_WEIGHT is not None else config.HYBRID_BM25_WEIGHT
+        form_data.HYBRID_BM25_WEIGHT
+        if form_data.HYBRID_BM25_WEIGHT is not None
+        else config.HYBRID_BM25_WEIGHT
     )
 
     # Content extraction settings
@@ -968,10 +999,14 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         else config.CONTENT_EXTRACTION_ENGINE
     )
     config.PDF_EXTRACT_IMAGES = (
-        form_data.PDF_EXTRACT_IMAGES if form_data.PDF_EXTRACT_IMAGES is not None else config.PDF_EXTRACT_IMAGES
+        form_data.PDF_EXTRACT_IMAGES
+        if form_data.PDF_EXTRACT_IMAGES is not None
+        else config.PDF_EXTRACT_IMAGES
     )
     config.PDF_LOADER_MODE = (
-        form_data.PDF_LOADER_MODE if form_data.PDF_LOADER_MODE is not None else config.PDF_LOADER_MODE
+        form_data.PDF_LOADER_MODE
+        if form_data.PDF_LOADER_MODE is not None
+        else config.PDF_LOADER_MODE
     )
     config.DATALAB_MARKER_API_KEY = (
         form_data.DATALAB_MARKER_API_KEY
@@ -1044,15 +1079,23 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         else config.EXTERNAL_DOCUMENT_LOADER_HEADERS
     )
     config.TIKA_SERVER_URL = (
-        form_data.TIKA_SERVER_URL if form_data.TIKA_SERVER_URL is not None else config.TIKA_SERVER_URL
+        form_data.TIKA_SERVER_URL
+        if form_data.TIKA_SERVER_URL is not None
+        else config.TIKA_SERVER_URL
     )
     config.DOCLING_SERVER_URL = (
-        form_data.DOCLING_SERVER_URL if form_data.DOCLING_SERVER_URL is not None else config.DOCLING_SERVER_URL
+        form_data.DOCLING_SERVER_URL
+        if form_data.DOCLING_SERVER_URL is not None
+        else config.DOCLING_SERVER_URL
     )
     config.DOCLING_API_KEY = (
-        form_data.DOCLING_API_KEY if form_data.DOCLING_API_KEY is not None else config.DOCLING_API_KEY
+        form_data.DOCLING_API_KEY
+        if form_data.DOCLING_API_KEY is not None
+        else config.DOCLING_API_KEY
     )
-    config.DOCLING_PARAMS = form_data.DOCLING_PARAMS if form_data.DOCLING_PARAMS is not None else config.DOCLING_PARAMS
+    config.DOCLING_PARAMS = (
+        form_data.DOCLING_PARAMS if form_data.DOCLING_PARAMS is not None else config.DOCLING_PARAMS
+    )
     config.DOCUMENT_INTELLIGENCE_ENDPOINT = (
         form_data.DOCUMENT_INTELLIGENCE_ENDPOINT
         if form_data.DOCUMENT_INTELLIGENCE_ENDPOINT is not None
@@ -1075,7 +1118,9 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         else config.MISTRAL_OCR_API_BASE_URL
     )
     config.MISTRAL_OCR_API_KEY = (
-        form_data.MISTRAL_OCR_API_KEY if form_data.MISTRAL_OCR_API_KEY is not None else config.MISTRAL_OCR_API_KEY
+        form_data.MISTRAL_OCR_API_KEY
+        if form_data.MISTRAL_OCR_API_KEY is not None
+        else config.MISTRAL_OCR_API_KEY
     )
     config.MISTRAL_OCR_USE_BASE64 = (
         form_data.MISTRAL_OCR_USE_BASE64
@@ -1083,22 +1128,36 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         else config.MISTRAL_OCR_USE_BASE64
     )
     config.PADDLEOCR_VL_BASE_URL = (
-        form_data.PADDLEOCR_VL_BASE_URL if form_data.PADDLEOCR_VL_BASE_URL is not None else config.PADDLEOCR_VL_BASE_URL
+        form_data.PADDLEOCR_VL_BASE_URL
+        if form_data.PADDLEOCR_VL_BASE_URL is not None
+        else config.PADDLEOCR_VL_BASE_URL
     )
     config.PADDLEOCR_VL_TOKEN = (
-        form_data.PADDLEOCR_VL_TOKEN if form_data.PADDLEOCR_VL_TOKEN is not None else config.PADDLEOCR_VL_TOKEN
+        form_data.PADDLEOCR_VL_TOKEN
+        if form_data.PADDLEOCR_VL_TOKEN is not None
+        else config.PADDLEOCR_VL_TOKEN
     )
 
     # MinerU settings
     config.MINERU_API_MODE = (
-        form_data.MINERU_API_MODE if form_data.MINERU_API_MODE is not None else config.MINERU_API_MODE
+        form_data.MINERU_API_MODE
+        if form_data.MINERU_API_MODE is not None
+        else config.MINERU_API_MODE
     )
-    config.MINERU_API_URL = form_data.MINERU_API_URL if form_data.MINERU_API_URL is not None else config.MINERU_API_URL
-    config.MINERU_API_KEY = form_data.MINERU_API_KEY if form_data.MINERU_API_KEY is not None else config.MINERU_API_KEY
+    config.MINERU_API_URL = (
+        form_data.MINERU_API_URL if form_data.MINERU_API_URL is not None else config.MINERU_API_URL
+    )
+    config.MINERU_API_KEY = (
+        form_data.MINERU_API_KEY if form_data.MINERU_API_KEY is not None else config.MINERU_API_KEY
+    )
     config.MINERU_API_TIMEOUT = (
-        form_data.MINERU_API_TIMEOUT if form_data.MINERU_API_TIMEOUT is not None else config.MINERU_API_TIMEOUT
+        form_data.MINERU_API_TIMEOUT
+        if form_data.MINERU_API_TIMEOUT is not None
+        else config.MINERU_API_TIMEOUT
     )
-    config.MINERU_PARAMS = form_data.MINERU_PARAMS if form_data.MINERU_PARAMS is not None else config.MINERU_PARAMS
+    config.MINERU_PARAMS = (
+        form_data.MINERU_PARAMS if form_data.MINERU_PARAMS is not None else config.MINERU_PARAMS
+    )
     config.MINERU_FILE_EXTENSIONS = (
         form_data.MINERU_FILE_EXTENSIONS
         if form_data.MINERU_FILE_EXTENSIONS is not None
@@ -1119,7 +1178,9 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
     config.RAG_RERANKING_ENGINE = (
-        form_data.RAG_RERANKING_ENGINE if form_data.RAG_RERANKING_ENGINE is not None else config.RAG_RERANKING_ENGINE
+        form_data.RAG_RERANKING_ENGINE
+        if form_data.RAG_RERANKING_ENGINE is not None
+        else config.RAG_RERANKING_ENGINE
     )
 
     config.RAG_EXTERNAL_RERANKER_URL = (
@@ -1146,10 +1207,14 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         else config.RAG_RERANKING_BATCH_SIZE
     )
 
-    log.info(f'Updating reranking model: {config.RAG_RERANKING_MODEL} to {form_data.RAG_RERANKING_MODEL}')
+    log.info(
+        f'Updating reranking model: {config.RAG_RERANKING_MODEL} to {form_data.RAG_RERANKING_MODEL}'
+    )
     try:
         config.RAG_RERANKING_MODEL = (
-            form_data.RAG_RERANKING_MODEL if form_data.RAG_RERANKING_MODEL is not None else config.RAG_RERANKING_MODEL
+            form_data.RAG_RERANKING_MODEL
+            if form_data.RAG_RERANKING_MODEL is not None
+            else config.RAG_RERANKING_MODEL
         )
 
         try:
@@ -1179,17 +1244,25 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         )
 
     # Chunking settings
-    config.TEXT_SPLITTER = form_data.TEXT_SPLITTER if form_data.TEXT_SPLITTER is not None else config.TEXT_SPLITTER
+    config.TEXT_SPLITTER = (
+        form_data.TEXT_SPLITTER if form_data.TEXT_SPLITTER is not None else config.TEXT_SPLITTER
+    )
     config.ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER = (
         form_data.ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER
         if form_data.ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER is not None
         else config.ENABLE_MARKDOWN_HEADER_TEXT_SPLITTER
     )
-    config.CHUNK_SIZE = form_data.CHUNK_SIZE if form_data.CHUNK_SIZE is not None else config.CHUNK_SIZE
-    config.CHUNK_MIN_SIZE_TARGET = (
-        form_data.CHUNK_MIN_SIZE_TARGET if form_data.CHUNK_MIN_SIZE_TARGET is not None else config.CHUNK_MIN_SIZE_TARGET
+    config.CHUNK_SIZE = (
+        form_data.CHUNK_SIZE if form_data.CHUNK_SIZE is not None else config.CHUNK_SIZE
     )
-    config.CHUNK_OVERLAP = form_data.CHUNK_OVERLAP if form_data.CHUNK_OVERLAP is not None else config.CHUNK_OVERLAP
+    config.CHUNK_MIN_SIZE_TARGET = (
+        form_data.CHUNK_MIN_SIZE_TARGET
+        if form_data.CHUNK_MIN_SIZE_TARGET is not None
+        else config.CHUNK_MIN_SIZE_TARGET
+    )
+    config.CHUNK_OVERLAP = (
+        form_data.CHUNK_OVERLAP if form_data.CHUNK_OVERLAP is not None else config.CHUNK_OVERLAP
+    )
     config.RAG_TOKENIZER_MODEL = (
         form_data.RAG_TOKENIZER_MODEL.strip()
         if form_data.RAG_TOKENIZER_MODEL is not None
@@ -1205,11 +1278,15 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         config.FILE_MAX_COUNT = None if form_data.FILE_MAX_COUNT == '' else form_data.FILE_MAX_COUNT
     if form_data.FILE_IMAGE_COMPRESSION_WIDTH is not None:
         config.FILE_IMAGE_COMPRESSION_WIDTH = (
-            None if form_data.FILE_IMAGE_COMPRESSION_WIDTH == '' else form_data.FILE_IMAGE_COMPRESSION_WIDTH
+            None
+            if form_data.FILE_IMAGE_COMPRESSION_WIDTH == ''
+            else form_data.FILE_IMAGE_COMPRESSION_WIDTH
         )
     if form_data.FILE_IMAGE_COMPRESSION_HEIGHT is not None:
         config.FILE_IMAGE_COMPRESSION_HEIGHT = (
-            None if form_data.FILE_IMAGE_COMPRESSION_HEIGHT == '' else form_data.FILE_IMAGE_COMPRESSION_HEIGHT
+            None
+            if form_data.FILE_IMAGE_COMPRESSION_HEIGHT == ''
+            else form_data.FILE_IMAGE_COMPRESSION_HEIGHT
         )
 
     config.ALLOWED_FILE_EXTENSIONS = (
@@ -1242,7 +1319,9 @@ async def update_rag_config(request: Request, form_data: ConfigForm, user=Depend
         config.WEB_FETCH_MAX_CONTENT_LENGTH = form_data.web.WEB_FETCH_MAX_CONTENT_LENGTH
         config.WEB_LOADER_CONCURRENT_REQUESTS = form_data.web.WEB_LOADER_CONCURRENT_REQUESTS
         config.WEB_SEARCH_DOMAIN_FILTER_LIST = form_data.web.WEB_SEARCH_DOMAIN_FILTER_LIST
-        config.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL = form_data.web.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL
+        config.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL = (
+            form_data.web.BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL
+        )
         config.BYPASS_WEB_SEARCH_WEB_LOADER = form_data.web.BYPASS_WEB_SEARCH_WEB_LOADER
         config.OLLAMA_CLOUD_WEB_SEARCH_API_KEY = form_data.web.OLLAMA_CLOUD_WEB_SEARCH_API_KEY
         config.SEARXNG_QUERY_URL = form_data.web.SEARXNG_QUERY_URL
@@ -1728,7 +1807,9 @@ def save_docs_to_vector_db(
                 VECTOR_DB_CLIENT.delete_collection(collection_name=collection_name)
                 log.info(f'deleting existing collection {collection_name}')
             elif add is False:
-                log.info(f'collection {collection_name} already exists, overwrite is False and add is False')
+                log.info(
+                    f'collection {collection_name} already exists, overwrite is False and add is False'
+                )
                 return True
 
         log.info(f'generating embeddings for {collection_name}')
@@ -1756,7 +1837,9 @@ def save_docs_to_vector_db(
             ),
             config.RAG_EMBEDDING_BATCH_SIZE,
             azure_api_version=(
-                config.RAG_AZURE_OPENAI_API_VERSION if config.RAG_EMBEDDING_ENGINE == 'azure_openai' else None
+                config.RAG_AZURE_OPENAI_API_VERSION
+                if config.RAG_EMBEDDING_ENGINE == 'azure_openai'
+                else None
             ),
             enable_async=config.ENABLE_ASYNC_EMBEDDING,
             concurrent_requests=config.RAG_EMBEDDING_CONCURRENT_REQUESTS,
@@ -1840,7 +1923,9 @@ async def process_file(
 
                 try:
                     # /files/{file_id}/data/content/update
-                    await ASYNC_VECTOR_DB_CLIENT.delete_collection(collection_name=f'file-{file.id}')
+                    await ASYNC_VECTOR_DB_CLIENT.delete_collection(
+                        collection_name=f'file-{file.id}'
+                    )
                 except Exception:
                     # Audio file upload pipeline
                     pass
@@ -1904,7 +1989,9 @@ async def process_file(
                         'file_name': file.filename,
                         'file_content_type': file.meta.get('content_type'),
                     }
-                    docs = await loader.aload(file.filename, file.meta.get('content_type'), file_path)
+                    docs = await loader.aload(
+                        file.filename, file.meta.get('content_type'), file_path
+                    )
 
                     docs = [
                         Document(
@@ -2011,7 +2098,10 @@ async def process_file(
                                 actor=user,
                                 subject_id=file.id,
                                 subject_type='file',
-                                data={'collection_name': collection_name, 'filename': file.filename},
+                                data={
+                                    'collection_name': collection_name,
+                                    'filename': file.filename,
+                                },
                             )
                             return {
                                 'status': True,
@@ -2079,7 +2169,9 @@ async def process_text(
     log.debug(f'text_content: {text_content}')
 
     config = await get_retrieval_config()
-    result = await run_in_threadpool(save_docs_to_vector_db, request, docs, collection_name, config, user=user)
+    result = await run_in_threadpool(
+        save_docs_to_vector_db, request, docs, collection_name, config, user=user
+    )
     if result:
         await publish_event(
             request,
@@ -2233,7 +2325,9 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
                 referer=config.WEBUI_URL,
             )
         else:
-            raise Exception('No GOOGLE_PSE_API_KEY or GOOGLE_PSE_ENGINE_ID found in environment variables')
+            raise Exception(
+                'No GOOGLE_PSE_API_KEY or GOOGLE_PSE_ENGINE_ID found in environment variables'
+            )
     elif engine == 'brave':
         if config.BRAVE_SEARCH_API_KEY:
             return await search_brave(
@@ -2406,7 +2500,11 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
             config.WEB_SEARCH_DOMAIN_FILTER_LIST,
         )
     elif engine == 'azure':
-        if config.AZURE_AI_SEARCH_API_KEY and config.AZURE_AI_SEARCH_ENDPOINT and config.AZURE_AI_SEARCH_INDEX_NAME:
+        if (
+            config.AZURE_AI_SEARCH_API_KEY
+            and config.AZURE_AI_SEARCH_ENDPOINT
+            and config.AZURE_AI_SEARCH_INDEX_NAME
+        ):
             return await asyncio.to_thread(
                 search_azure,
                 config.AZURE_AI_SEARCH_API_KEY,
@@ -2513,7 +2611,9 @@ async def search_web(request: Request, engine: str, query: str, user=None) -> li
 
 
 @router.post('/process/web/search')
-async def process_web_search(request: Request, form_data: SearchForm, user=Depends(get_verified_user)):
+async def process_web_search(
+    request: Request, form_data: SearchForm, user=Depends(get_verified_user)
+):
     config = await get_retrieval_config()
     if not config.ENABLE_WEB_SEARCH:
         raise HTTPException(
@@ -2521,7 +2621,9 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
         )
 
-    if user.role != 'admin' and not await has_permission(user.id, 'features.web_search', config.USER_PERMISSIONS):
+    if user.role != 'admin' and not await has_permission(
+        user.id, 'features.web_search', config.USER_PERMISSIONS
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
@@ -2636,7 +2738,9 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
             }
         else:
             # Create a single collection for all documents
-            collection_name = f'web-search-{calculate_sha256_string("-".join(form_data.queries))}'[:63]
+            collection_name = f'web-search-{calculate_sha256_string("-".join(form_data.queries))}'[
+                :63
+            ]
 
             try:
                 await run_in_threadpool(
@@ -2668,7 +2772,9 @@ async def process_web_search(request: Request, form_data: SearchForm, user=Depen
         )
 
 
-async def _validate_collection_access(collection_names: list[str], user, access_type: str = 'read') -> None:
+async def _validate_collection_access(
+    collection_names: list[str], user, access_type: str = 'read'
+) -> None:
     """
     Raise 403 if the user lacks access to any of the requested collections.
     Delegates to the shared filter_accessible_collections utility so the
@@ -2714,7 +2820,11 @@ async def query_doc_handler(
                 ),
                 k=form_data.k if form_data.k else config.TOP_K,
                 reranking_function=(
-                    (lambda query, documents: request.app.state.RERANKING_FUNCTION(query, documents, user=user))
+                    (
+                        lambda query, documents: request.app.state.RERANKING_FUNCTION(
+                            query, documents, user=user
+                        )
+                    )
                     if request.app.state.RERANKING_FUNCTION
                     else None
                 ),
@@ -2779,7 +2889,11 @@ async def query_collection_handler(
                 ),
                 k=form_data.k if form_data.k else config.TOP_K,
                 reranking_function=(
-                    (lambda query, documents: request.app.state.RERANKING_FUNCTION(query, documents, user=user))
+                    (
+                        lambda query, documents: request.app.state.RERANKING_FUNCTION(
+                            query, documents, user=user
+                        )
+                    )
                     if request.app.state.RERANKING_FUNCTION
                     else None
                 ),
@@ -2856,7 +2970,9 @@ async def delete_entries_from_collection(
             if hash is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=ERROR_MESSAGES.DEFAULT('File has no hash; cannot delete vector entries by hash.'),
+                    detail=ERROR_MESSAGES.DEFAULT(
+                        'File has no hash; cannot delete vector entries by hash.'
+                    ),
                 )
 
             # Pre-existing bug: this used `metadata=` which is not a
@@ -2939,7 +3055,11 @@ if ENV == 'dev':
 
     @router.get('/ef/{text}')
     async def get_embeddings(request: Request, text: str | None = 'Hello World!'):
-        return {'result': await request.app.state.EMBEDDING_FUNCTION(text, prefix=RAG_EMBEDDING_QUERY_PREFIX)}
+        return {
+            'result': await request.app.state.EMBEDDING_FUNCTION(
+                text, prefix=RAG_EMBEDDING_QUERY_PREFIX
+            )
+        }
 
 
 class BatchProcessFilesForm(BaseModel):
@@ -3036,7 +3156,9 @@ async def process_files_batch(
 
         except Exception as e:
             log.error(f'process_files_batch: Error processing file {file.id}: {str(e)}')
-            file_errors.append(BatchProcessFilesResult(file_id=file.id, status='failed', error=str(e)))
+            file_errors.append(
+                BatchProcessFilesResult(file_id=file.id, status='failed', error=str(e))
+            )
 
     # Save all documents in one batch
     if all_docs:
@@ -3060,7 +3182,11 @@ async def process_files_batch(
             log.error(f'process_files_batch: Error saving documents to vector DB: {str(e)}')
             for file_result in file_results:
                 file_result.status = 'failed'
-                file_errors.append(BatchProcessFilesResult(file_id=file_result.file_id, status='failed', error=str(e)))
+                file_errors.append(
+                    BatchProcessFilesResult(
+                        file_id=file_result.file_id, status='failed', error=str(e)
+                    )
+                )
 
     response = BatchProcessFilesResponse(results=file_results, errors=file_errors)
     await publish_event(
