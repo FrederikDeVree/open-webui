@@ -815,7 +815,7 @@ class KnowledgeTable:
                     update(Knowledge)
                     .filter_by(id=id)
                     .values(
-                        **form_data.model_dump(exclude={'access_grants'}),
+                        **form_data.model_dump(exclude={'access_grants', 'context'}),
                         updated_at=int(time.time()),
                     )
                 )
