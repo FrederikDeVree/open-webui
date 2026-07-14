@@ -41,7 +41,7 @@ services:
       <<: *postgres-env
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - open-webui-dev-data:/var/lib/postgresql/data
     healthcheck:
@@ -58,7 +58,7 @@ services:
     container_name: open-webui-dev-adminer
     restart: unless-stopped
     ports:
-      - "9080:8080"
+      - "9081:8080"
     environment:
       ADMINER_DEFAULT_SERVER: postgres
       ADMINER_DESIGN: nette
