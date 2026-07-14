@@ -2,7 +2,7 @@ name: open-webui-dev
 
 x-postgres-env: &postgres-env
   POSTGRES_HOST: postgres
-  POSTGRES_PORT: 5432
+  POSTGRES_PORT: 5433
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
   POSTGRES_DB: arvoodb
