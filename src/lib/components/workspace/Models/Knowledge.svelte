@@ -197,11 +197,15 @@
 							const item = e.detail;
 
 							if (!selectedItems.find((k) => k.id === item.id)) {
+								// Inherit KB-level default context if set
+								const kbContext = item?.meta?.context;
+								const enrichedItem = kbContext
+									? { ...item, context: kbContext }
+									: item;
+
 								selectedItems = [
 									...selectedItems,
-									{
-										...item
-									}
+									enrichedItem
 								];
 							}
 						}}

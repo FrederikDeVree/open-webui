@@ -77,7 +77,9 @@
 			knowledgeItems = res.items.map((note) => {
 				return {
 					...note,
-					type: 'collection'
+					type: 'collection',
+					// Preserve meta so the selector can inherit KB-level defaults
+					meta: note.meta
 				};
 			});
 		}

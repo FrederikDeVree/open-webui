@@ -945,7 +945,8 @@
 				...knowledge,
 				name: knowledge.name,
 				description: knowledge.description,
-				access_grants: knowledge.access_grants ?? []
+				access_grants: knowledge.access_grants ?? [],
+				context: knowledge.meta?.context ?? ''
 			}).catch((e) => {
 				toast.error(`${e}`);
 			});
@@ -1311,6 +1312,29 @@
 							</Tooltip>
 						</div>
 					</div>
+
+					{#if knowledge?.write_access}
+						<div class="flex w-full justify-between mt-3">
+							<div class="self-center text-xs font-medium">
+								{$i18n.t('Default Retrieval Mode')}
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-gray-500">
+									{knowledge?.meta?.context === 'full'
+										? $i18n.t('Full Context')
+										: $i18n.t('Focused Retrieval')}
+								</span>
+								<Switch
+									bind:state={knowledge.meta?.context === 'full'}
+									on:change={async (e) => {
+										const isFull = e.detail;
+										knowledge.meta = { ...(knowledge.meta || {}), context: isFull ? 'full' : undefined };
+										changeDebounceHandler();
+									}}
+								/>
+							</div>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>

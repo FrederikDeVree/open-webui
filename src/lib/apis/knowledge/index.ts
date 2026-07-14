@@ -602,6 +602,7 @@ type KnowledgeUpdateForm = {
 	description?: string;
 	data?: object;
 	access_grants?: object[];
+	context?: string;
 };
 
 export const updateKnowledgeById = async (token: string, id: string, form: KnowledgeUpdateForm) => {
@@ -618,7 +619,8 @@ export const updateKnowledgeById = async (token: string, id: string, form: Knowl
 			name: form?.name ? form.name : undefined,
 			description: form?.description ? form.description : undefined,
 			data: form?.data ? form.data : undefined,
-			access_grants: form.access_grants
+			access_grants: form.access_grants,
+			context: form.context
 		})
 	})
 		.then(async (res) => {
