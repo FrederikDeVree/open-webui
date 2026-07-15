@@ -598,7 +598,7 @@ async def ldap_auth(
             )
             if not search_success or not connection_app.entries:
                 last_error = 'User not found in the LDAP server'
-                break
+                continue
 
             entry = connection_app.entries[0]
             entry_username = entry[ldap_attribute_for_username].value
@@ -612,7 +612,7 @@ async def ldap_auth(
 
             if not email:
                 last_error = 'User does not have a valid email address.'
-                break
+                continue
             elif isinstance(email, str):
                 email = email.lower()
             elif isinstance(email, list):
@@ -668,7 +668,7 @@ async def ldap_auth(
                 )
                 if not await asyncio.to_thread(connection_user.bind):
                     last_error = 'Authentication failed.'
-                    break
+                    continue
 
                 user = await Users.get_user_by_email(email, db=db)
                 if not user:
@@ -730,7 +730,7 @@ async def ldap_auth(
                 raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
 
             last_error = 'User record mismatch.'
-            break
+            continue
         except Exception as e:
             last_error = str(e)
             log.error(f'LDAP authentication error for {ldap_label}: {str(e)}')
