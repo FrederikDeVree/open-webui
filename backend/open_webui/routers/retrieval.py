@@ -1815,6 +1815,12 @@ def save_docs_to_vector_db(
                 return True
 
         log.info(f'generating embeddings for {collection_name}')
+        # Per-request embedding cache: shared across multiple save_docs_to_vector_db
+        # calls within the same request (e.g., file upload + knowledge base link).
+        # Prevents redundant embedding generation when the same text chunks are
+        # indexed into multiple collections.
+        if not hasattr(request.state, 'embedding_cache'):
+            request.state.embedding_cache = {}
         embedding_function = get_embedding_function(
             config.RAG_EMBEDDING_ENGINE,
             config.RAG_EMBEDDING_MODEL,
@@ -1845,6 +1851,7 @@ def save_docs_to_vector_db(
             ),
             enable_async=config.ENABLE_ASYNC_EMBEDDING,
             concurrent_requests=config.RAG_EMBEDDING_CONCURRENT_REQUESTS,
+            cache=request.state.embedding_cache,
         )
 
         # Run async embedding in sync context using the main event loop

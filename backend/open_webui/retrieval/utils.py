@@ -1116,6 +1116,7 @@ def get_embedding_function(
     azure_api_version=None,
     enable_async=True,
     concurrent_requests=0,
+    cache: Optional[dict] = None,
 ) -> Awaitable:
     if embedding_engine == '':
         # Sentence transformers: CPU-bound sync operation
@@ -1127,7 +1128,15 @@ def get_embedding_function(
                     'SentenceTransformer model name, or configure an external '
                     'RAG_EMBEDDING_ENGINE (ollama, openai, azure_openai).'
                 )
-            return await asyncio.to_thread(
+
+            # Check cache
+            if cache is not None:
+                query_tuple = tuple(query) if isinstance(query, list) else (query,)
+                cache_key = (prefix, query_tuple)
+                if cache_key in cache:
+                    return cache[cache_key]
+
+            result = await asyncio.to_thread(
                 (
                     lambda query, prefix=None: embedding_function.encode(
                         query,
@@ -1138,6 +1147,12 @@ def get_embedding_function(
                 query,
                 prefix,
             )
+
+            # Store in cache
+            if cache is not None:
+                cache[cache_key] = result
+
+            return result
 
         return async_embedding_function
     elif embedding_engine in ['ollama', 'openai', 'azure_openai']:
@@ -1153,6 +1168,13 @@ def get_embedding_function(
         )
 
         async def async_embedding_function(query, prefix=None, user=None):
+            # Check cache for exact match
+            if cache is not None:
+                query_tuple = tuple(query) if isinstance(query, list) else (query,)
+                cache_key = (prefix, query_tuple)
+                if cache_key in cache:
+                    return cache[cache_key]
+
             if isinstance(query, list):
                 # Create batches
                 batches = [
@@ -1201,9 +1223,20 @@ def get_embedding_function(
                 log.debug(
                     f'generate_multiple_async: Generated {len(embeddings)} embeddings from {len(batches)} parallel batches'
                 )
+
+                # Store in cache
+                if cache is not None:
+                    cache[cache_key] = embeddings
+
                 return embeddings
             else:
-                return await embedding_function(query, prefix, user)
+                result = await embedding_function(query, prefix, user)
+
+                # Store in cache
+                if cache is not None:
+                    cache[cache_key] = result
+
+                return result
 
         return async_embedding_function
     else:
