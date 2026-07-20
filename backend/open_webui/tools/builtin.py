@@ -65,7 +65,9 @@ async def _has_read_access_to_file(
     """Check if a user can read a file via ownership, admin role, model attachment, or access grants."""
     if file.user_id == user_id or user_role == 'admin':
         return True
-    if model_knowledge and any(item.get('type') == 'file' and item.get('id') == file.id for item in model_knowledge):
+    if model_knowledge and any(
+        item.get('type') == 'file' and item.get('id') == file.id for item in model_knowledge
+    ):
         return True
     from open_webui.utils.access_control.files import has_access_to_file
 
@@ -236,7 +238,7 @@ async def search_web(
         user = UserModel(**__user__) if __user__ else None
 
         configured = await Config.get('web.search.result_count')
-        max_count = 5 if configured is None else configured
+        max_count = 10 if configured is None else configured
         count = max(1, min(count, max_count)) if count is not None else max_count
 
         results = await _search_web(__request__, engine, query, user)
@@ -462,8 +464,7 @@ async def execute_code(
         if CODE_INTERPRETER_BLOCKED_MODULES:
             import textwrap
 
-            blocking_code = textwrap.dedent(
-                f"""
+            blocking_code = textwrap.dedent(f"""
                 import builtins
 
                 BLOCKED_MODULES = {CODE_INTERPRETER_BLOCKED_MODULES}
@@ -479,8 +480,7 @@ async def execute_code(
                     return _real_import(name, globals, locals, fromlist, level)
 
                 builtins.__import__ = restricted_import
-                """
-            )
+                """)
             code = blocking_code + '\n' + code
 
         engine = await Config.get('code_interpreter.engine', 'pyodide')
@@ -488,7 +488,9 @@ async def execute_code(
             # Execute via frontend pyodide using bidirectional event call
             if __event_call__ is None:
                 return json.dumps(
-                    {'error': 'Event call not available. WebSocket connection required for pyodide execution.'}
+                    {
+                        'error': 'Event call not available. WebSocket connection required for pyodide execution.'
+                    }
                 )
 
             output = await __event_call__(
@@ -527,8 +529,16 @@ async def execute_code(
             output = await execute_code_jupyter(
                 await Config.get('code_interpreter.jupyter.url'),
                 code,
-                (await Config.get('code_interpreter.jupyter.auth_token') if jupyter_auth == 'token' else None),
-                (await Config.get('code_interpreter.jupyter.auth_password') if jupyter_auth == 'password' else None),
+                (
+                    await Config.get('code_interpreter.jupyter.auth_token')
+                    if jupyter_auth == 'token'
+                    else None
+                ),
+                (
+                    await Config.get('code_interpreter.jupyter.auth_password')
+                    if jupyter_auth == 'password'
+                    else None
+                ),
                 await Config.get('code_interpreter.jupyter.timeout'),
             )
 
@@ -662,7 +672,7 @@ async def read_memory_path(
 
 async def search_memories(
     query: str = '',
-    count: int = 5,
+    count: int = 10,
     type: str = 'all',
     path: Optional[str] = None,
     memory_id: Optional[str] = None,
@@ -673,7 +683,7 @@ async def search_memories(
     Search or browse saved memories by content, path, type, or memory ID.
 
     :param query: Optional query to search memory content and path
-    :param count: Number of memories to return (default 5)
+    :param count: Number of memories to return (default 10)
     :param type: "user", "context", or "all"
     :param path: Optional memory path to search around
     :param memory_id: Optional exact memory ID to read
@@ -868,7 +878,9 @@ async def delete_memory(
         result = await Memories.delete_memory_by_id_and_user_id(memory_id, user.id)
 
         if result:
-            await ASYNC_VECTOR_DB_CLIENT.delete(collection_name=f'user-memory-{user.id}', ids=[memory_id])
+            await ASYNC_VECTOR_DB_CLIENT.delete(
+                collection_name=f'user-memory-{user.id}', ids=[memory_id]
+            )
             return json.dumps(
                 {'status': 'success', 'message': f'Memory {memory_id} deleted'},
                 ensure_ascii=False,
@@ -924,7 +936,7 @@ async def list_memories(
 
 async def search_notes(
     query: str,
-    count: int = 5,
+    count: int = 10,
     start_timestamp: Optional[int] = None,
     end_timestamp: Optional[int] = None,
     __request__: Request = None,
@@ -934,7 +946,7 @@ async def search_notes(
     Search the user's saved notes by title and content.
 
     :param query: The search query to find matching notes
-    :param count: Maximum number of results to return (default: 5)
+    :param count: Maximum number of results to return (default: 10)
     :param start_timestamp: Only include notes updated after this Unix timestamp (seconds)
     :param end_timestamp: Only include notes updated before this Unix timestamp (seconds)
     :return: JSON with matching notes containing id, title, and content snippet
@@ -1202,7 +1214,7 @@ async def replace_note_content(
 
 async def search_chats(
     query: str,
-    count: int = 5,
+    count: int = 10,
     start_timestamp: Optional[int] = None,
     end_timestamp: Optional[int] = None,
     __request__: Request = None,
@@ -1214,7 +1226,7 @@ async def search_chats(
     Helpful for finding details from earlier conversations.
 
     :param query: The search query to find matching chats
-    :param count: Maximum number of results to return (default: 5)
+    :param count: Maximum number of results to return (default: 10)
     :param start_timestamp: Only include chats updated after this Unix timestamp (seconds)
     :param end_timestamp: Only include chats updated before this Unix timestamp (seconds)
     :return: JSON with matching chats containing id, title, updated_at, and content snippet
@@ -1259,7 +1271,11 @@ async def search_chats(
                     idx = content.lower().find(lower_query)
                     start = max(0, idx - 50)
                     end = min(len(content), idx + len(query) + 100)
-                    snippet = ('...' if start > 0 else '') + content[start:end] + ('...' if end < len(content) else '')
+                    snippet = (
+                        ('...' if start > 0 else '')
+                        + content[start:end]
+                        + ('...' if end < len(content) else '')
+                    )
                     break
 
             if not snippet and lower_query in chat.title.lower():
@@ -1355,7 +1371,7 @@ async def view_chat(
 
 async def search_channels(
     query: str,
-    count: int = 5,
+    count: int = 10,
     __request__: Request = None,
     __user__: dict = None,
 ) -> str:
@@ -1363,7 +1379,7 @@ async def search_channels(
     Search channels by name and description to find accessible team spaces.
 
     :param query: The search query to find matching channels
-    :param count: Maximum number of results to return (default: 5)
+    :param count: Maximum number of results to return (default: 10)
     :return: JSON with matching channels containing id, name, description, and type
     """
     if __request__ is None:
@@ -1464,7 +1480,11 @@ async def search_channel_messages(
             if idx != -1:
                 start = max(0, idx - 50)
                 end = min(len(content), idx + len(query) + 100)
-                snippet = ('...' if start > 0 else '') + content[start:end] + ('...' if end < len(content) else '')
+                snippet = (
+                    ('...' if start > 0 else '')
+                    + content[start:end]
+                    + ('...' if end < len(content) else '')
+                )
             else:
                 snippet = content[:150] + ('...' if len(content) > 150 else '')
 
@@ -1696,7 +1716,7 @@ async def list_knowledge_bases(
 
 async def search_knowledge_bases(
     query: str,
-    count: int = 5,
+    count: int = 10,
     skip: int = 0,
     __request__: Request = None,
     __user__: dict = None,
@@ -1706,7 +1726,7 @@ async def search_knowledge_bases(
     a relevant internal source.
 
     :param query: The search query to find matching knowledge bases
-    :param count: Maximum number of results to return (default: 5)
+    :param count: Maximum number of results to return (default: 10)
     :param skip: Number of results to skip for pagination (default: 0)
     :return: JSON with matching KBs containing id, name, description, and file_count
     """
@@ -1757,7 +1777,7 @@ async def search_knowledge_bases(
 async def list_knowledge_files(
     query: str,
     knowledge_id: Optional[str] = None,
-    count: int = 5,
+    count: int = 10,
     skip: int = 0,
     __request__: Request = None,
     __user__: dict = None,
@@ -1771,7 +1791,7 @@ async def list_knowledge_files(
 
     :param query: The search query to find matching files by filename
     :param knowledge_id: Optional KB id to limit search to a specific knowledge base
-    :param count: Maximum number of results to return (default: 5)
+    :param count: Maximum number of results to return (default: 10)
     :param skip: Number of results to skip for pagination (default: 0)
     :return: JSON with matching files containing id, filename, and updated_at
     """
@@ -1806,7 +1826,9 @@ async def list_knowledge_files(
             # If knowledge_id specified, verify it's in the attached set
             if knowledge_id:
                 if knowledge_id not in attached_kb_ids:
-                    return json.dumps({'error': f'Knowledge base {knowledge_id} is not attached to this model'})
+                    return json.dumps(
+                        {'error': f'Knowledge base {knowledge_id} is not attached to this model'}
+                    )
                 attached_kb_ids = {knowledge_id}
 
             all_files = []
@@ -1976,7 +1998,9 @@ async def grep_knowledge_files(
             # Single file mode — verify access
             file = await Files.get_file_by_id(file_id)
             if file:
-                if not await _has_read_access_to_file(file, user_id, user_role, __model_knowledge__):
+                if not await _has_read_access_to_file(
+                    file, user_id, user_role, __model_knowledge__
+                ):
                     return json.dumps({'error': 'File not found'})
                 files_to_search.append(file)
         elif __model_knowledge__:
@@ -2079,7 +2103,9 @@ async def grep_knowledge_files(
 
         output = '\n'.join(results)
         if total_matches > MAX_GREP_RESULTS:
-            output += f'\n[{MAX_GREP_RESULTS} of {total_matches} matches shown — use file_id to narrow]'
+            output += (
+                f'\n[{MAX_GREP_RESULTS} of {total_matches} matches shown — use file_id to narrow]'
+            )
         return output
 
     except Exception as e:
@@ -2440,7 +2466,9 @@ async def list_knowledge(
                     if knowledge_id and knowledge_id == knowledge.id:
                         if kb_files:
                             paged_files = kb_files[skip : skip + count]
-                            kb_entry['files'] = [{'id': f.id, 'filename': f.filename} for f in paged_files]
+                            kb_entry['files'] = [
+                                {'id': f.id, 'filename': f.filename} for f in paged_files
+                            ]
                             kb_entry['files_skip'] = skip
                             kb_entry['files_count'] = len(paged_files)
                             kb_entry['files_total'] = file_count
@@ -2494,7 +2522,7 @@ async def list_knowledge(
 async def search_knowledge_files(
     query: str,
     knowledge_ids: Optional[list[str]] = None,
-    count: int = 5,
+    count: int = 10,
     __request__: Request = None,
     __user__: dict = None,
     __model_knowledge__: list[dict] = None,
@@ -2510,7 +2538,7 @@ async def search_knowledge_files(
 
     :param query: The search query to find semantically relevant content
     :param knowledge_ids: Optional list of KB ids to limit search to specific knowledge bases
-    :param count: Maximum number of results to return (default: 5)
+    :param count: Maximum number of results to return (default: 10)
     :return: JSON with relevant chunks containing content, source filename, and relevance score
     """
     if __request__ is None:
@@ -2524,7 +2552,7 @@ async def search_knowledge_files(
         try:
             count = int(count)
         except ValueError:
-            count = 5  # Default fallback
+            count = 10  # Default fallback
 
     # Handle knowledge_ids being string "None", "null", or empty
     if isinstance(knowledge_ids, str):
@@ -2672,7 +2700,9 @@ async def search_knowledge_files(
                 for idx, doc in enumerate(documents):
                     chunk_info = {
                         'content': doc,
-                        'source': metadatas[idx].get('source', metadatas[idx].get('name', 'Unknown')),
+                        'source': metadatas[idx].get(
+                            'source', metadatas[idx].get('name', 'Unknown')
+                        ),
                         'file_id': metadatas[idx].get('file_id', ''),
                     }
                     if idx < len(distances):
@@ -2715,7 +2745,7 @@ async def search_knowledge_files(
 
 async def query_knowledge_bases(
     query: str,
-    count: int = 5,
+    count: int = 10,
     __request__: Request = None,
     __user__: dict = None,
 ) -> str:
@@ -2725,7 +2755,7 @@ async def query_knowledge_bases(
     Helpful for discovering which knowledge base to query next.
 
     :param query: Natural language query describing what you're looking for
-    :param count: Maximum results (default: 5)
+    :param count: Maximum results (default: 10)
     :return: JSON with matching KBs (id, name, description, similarity)
     """
     if __request__ is None:
@@ -2773,7 +2803,11 @@ async def query_knowledge_bases(
 
             if search_results and search_results.ids and search_results.ids[0]:
                 result_ids = search_results.ids[0]
-                result_distances = search_results.distances[0] if search_results.distances else [0] * len(result_ids)
+                result_distances = (
+                    search_results.distances[0]
+                    if search_results.distances
+                    else [0] * len(result_ids)
+                )
 
                 for knowledge_base_id, distance in zip(result_ids, result_distances):
                     if knowledge_base_id in seen_ids:
@@ -2886,9 +2920,13 @@ VALID_TASK_STATUSES = {'pending', 'in_progress', 'completed', 'cancelled'}
 
 
 class TaskItem(BaseModel):
-    id: Optional[str] = Field(None, description='Unique identifier for the task. Auto-generated if omitted.')
+    id: Optional[str] = Field(
+        None, description='Unique identifier for the task. Auto-generated if omitted.'
+    )
     content: str = Field(..., description='Task description.')
-    status: Literal['pending', 'in_progress', 'completed', 'cancelled'] = Field('pending', description='Task status.')
+    status: Literal['pending', 'in_progress', 'completed', 'cancelled'] = Field(
+        'pending', description='Task status.'
+    )
 
 
 def _task_summary(all_tasks: list[dict]) -> dict:
@@ -2992,7 +3030,9 @@ async def update_task(
         status = status.strip().lower()
         if status not in VALID_TASK_STATUSES:
             return json.dumps(
-                {'error': f'Invalid status: {status}. Must be one of: {", ".join(sorted(VALID_TASK_STATUSES))}'}
+                {
+                    'error': f'Invalid status: {status}. Must be one of: {", ".join(sorted(VALID_TASK_STATUSES))}'
+                }
             )
 
         all_tasks = await Chats.get_chat_tasks_by_id(__chat_id__)
@@ -3578,14 +3618,18 @@ async def create_calendar_event(
         try:
             start_ns = _dt_to_ns(start, tz)
         except (ValueError, TypeError) as e:
-            return json.dumps({'error': f'Invalid start datetime: {e}. Use format like "2026-04-20 09:00"'})
+            return json.dumps(
+                {'error': f'Invalid start datetime: {e}. Use format like "2026-04-20 09:00"'}
+            )
 
         end_ns = None
         if end:
             try:
                 end_ns = _dt_to_ns(end, tz)
             except (ValueError, TypeError) as e:
-                return json.dumps({'error': f'Invalid end datetime: {e}. Use format like "2026-04-20 10:00"'})
+                return json.dumps(
+                    {'error': f'Invalid end datetime: {e}. Use format like "2026-04-20 10:00"'}
+                )
         elif not all_day:
             # Default to 1 hour duration
             end_ns = start_ns + 3_600_000_000_000
