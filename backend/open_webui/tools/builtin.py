@@ -2522,7 +2522,7 @@ async def list_knowledge(
 async def search_knowledge_files(
     query: str,
     knowledge_ids: Optional[list[str]] = None,
-    count: int = 10,
+    count: int = 50,
     __request__: Request = None,
     __user__: dict = None,
     __model_knowledge__: list[dict] = None,
@@ -2538,7 +2538,7 @@ async def search_knowledge_files(
 
     :param query: The search query to find semantically relevant content
     :param knowledge_ids: Optional list of KB ids to limit search to specific knowledge bases
-    :param count: Maximum number of results to return (default: 10)
+    :param count: Maximum number of results to return (default: 50)
     :return: JSON with relevant chunks containing content, source filename, and relevance score
     """
     if __request__ is None:
@@ -2552,7 +2552,7 @@ async def search_knowledge_files(
         try:
             count = int(count)
         except ValueError:
-            count = 10  # Default fallback
+            count = 50  # Default fallback
 
     # Handle knowledge_ids being string "None", "null", or empty
     if isinstance(knowledge_ids, str):
