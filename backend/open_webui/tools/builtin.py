@@ -1754,7 +1754,7 @@ async def search_knowledge_bases(
         return json.dumps({'error': str(e)})
 
 
-async def search_knowledge_files(
+async def list_knowledge_files(
     query: str,
     knowledge_id: Optional[str] = None,
     count: int = 5,
@@ -1764,9 +1764,10 @@ async def search_knowledge_files(
     __model_knowledge__: Optional[list[dict]] = None,
 ) -> str:
     """
-    Search files by filename across knowledge bases the user has access to.
+    Find files by matching their FILENAME (not content) across knowledge bases the user has access to.
+    This does NOT search inside file contents - use search_knowledge_files for that.
     When the model has attached knowledge, searches only within attached KBs and files.
-    Helpful when looking for a specific document or file name.
+    Helpful only when looking for a specific document or file by its name, e.g. "find the file named budget.xlsx".
 
     :param query: The search query to find matching files by filename
     :param knowledge_id: Optional KB id to limit search to a specific knowledge base
@@ -1915,7 +1916,7 @@ async def search_knowledge_files(
 
         return json.dumps(files, ensure_ascii=False)
     except Exception as e:
-        log.exception(f'search_knowledge_files error: {e}')
+        log.exception(f'list_knowledge_files error: {e}')
         return json.dumps({'error': str(e)})
 
 
@@ -1936,7 +1937,7 @@ async def grep_knowledge_files(
 ) -> str:
     """
     Search for exact text across knowledge files. Returns matching lines with line numbers.
-    Unlike query_knowledge_files (semantic/vector search), this performs exact string matching.
+    Unlike search_knowledge_files (semantic/vector search), this performs exact string matching.
     Automatically detects regex patterns (e.g. "error|warn", "version \\d+").
     Helpful for literal strings, identifiers, error messages, or regex-style searches.
 
@@ -2490,7 +2491,7 @@ async def list_knowledge(
         return json.dumps({'error': str(e)})
 
 
-async def query_knowledge_files(
+async def search_knowledge_files(
     query: str,
     knowledge_ids: Optional[list[str]] = None,
     count: int = 5,
@@ -2499,9 +2500,13 @@ async def query_knowledge_files(
     __model_knowledge__: list[dict] = None,
 ) -> str:
     """
-    Search knowledge base files using semantic/vector search. Searches across collections (KBs),
-    individual files, and notes that the user has access to.
-    Helpful for internal documentation, uploaded knowledge, and attached model knowledge.
+    Search the CONTENTS of knowledge base files using semantic/vector search. This is the primary,
+    general-purpose tool for finding relevant information inside documents, notes, and attached
+    knowledge - use this whenever you need to answer a question using knowledge base content.
+    Searches across collections (KBs), individual files, and notes that the user has access to,
+    and returns the most relevant content chunks (not just filenames).
+    Use this for internal documentation, uploaded knowledge, and attached model knowledge.
+    Do NOT use list_knowledge_files here - that tool only matches filenames, not content.
 
     :param query: The search query to find semantically relevant content
     :param knowledge_ids: Optional list of KB ids to limit search to specific knowledge bases
@@ -2704,7 +2709,7 @@ async def query_knowledge_files(
 
         return json.dumps(chunks, ensure_ascii=False)
     except Exception as e:
-        log.exception(f'query_knowledge_files error: {e}')
+        log.exception(f'search_knowledge_files error: {e}')
         return json.dumps({'error': str(e)})
 
 

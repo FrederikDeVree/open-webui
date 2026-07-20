@@ -245,9 +245,9 @@ def get_citation_source_from_tool_result(
     - document: list of document contents
     - metadata: list of metadata objects with source, file_id, name fields
 
-    Returns a list of sources (usually one, but query_knowledge_files may return multiple).
+    Returns a list of sources (usually one, but search_knowledge_files may return multiple).
     """
-    _EXPECTS_LIST = {'search_web', 'query_knowledge_files'}
+    _EXPECTS_LIST = {'search_web', 'search_knowledge_files'}
     _EXPECTS_DICT = {'view_knowledge_file', 'view_file'}
 
     try:
@@ -336,7 +336,7 @@ def get_citation_source_from_tool_result(
                 }
             ]
 
-        elif tool_name == 'query_knowledge_files':
+        elif tool_name == 'search_knowledge_files':
             chunks = tool_result
 
             # Group chunks by source for better citation display
@@ -5235,7 +5235,7 @@ async def streaming_chat_response_handler(response, ctx):
                                 'fetch_url',
                                 'view_file',
                                 'view_knowledge_file',
-                                'query_knowledge_files',
+                                'search_knowledge_files',
                             ]
                             and tool_result
                         ):

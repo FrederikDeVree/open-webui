@@ -63,10 +63,10 @@ from open_webui.tools.builtin import (
     list_automations,
     list_knowledge,
     list_knowledge_bases,
+    list_knowledge_files,
     list_memories,
     list_memory_paths,
     query_knowledge_bases,
-    query_knowledge_files,
     read_memory_path,
     replace_memory_content,
     replace_note_content,
@@ -511,7 +511,7 @@ async def get_builtin_tools(
         builtin_functions.extend([get_current_timestamp, calculate_timestamp])
 
     # Knowledge base tools - conditional injection based on model knowledge
-    # If model has attached knowledge (any type), only provide query_knowledge_files
+    # If model has attached knowledge (any type), only provide search_knowledge_files
     # Otherwise, provide all KB browsing tools
     model_knowledge = model.get('info', {}).get('meta', {}).get('knowledge', [])
     # Merge folder-attached knowledge so builtin tools can search it
@@ -523,7 +523,7 @@ async def get_builtin_tools(
 
         if ENABLE_KB_EXEC:
             builtin_functions.append(kb_exec)
-            builtin_functions.append(query_knowledge_files)
+            builtin_functions.append(search_knowledge_files)
             # Notes attached to the model need view_note since kb_exec is file-only
             if model_knowledge:
                 knowledge_types = {item.get('type') for item in model_knowledge}
@@ -534,7 +534,7 @@ async def get_builtin_tools(
                 builtin_functions.append(search_knowledge_bases)
         elif model_knowledge:
             builtin_functions.extend(
-                [list_knowledge, search_knowledge_files, grep_knowledge_files, query_knowledge_files]
+                [list_knowledge, list_knowledge_files, grep_knowledge_files, search_knowledge_files]
             )
 
             knowledge_types = {item.get('type') for item in model_knowledge}
@@ -549,8 +549,8 @@ async def get_builtin_tools(
                     search_knowledge_bases,
                     query_knowledge_bases,
                     grep_knowledge_files,
+                    list_knowledge_files,
                     search_knowledge_files,
-                    query_knowledge_files,
                     view_knowledge_file,
                 ]
             )
