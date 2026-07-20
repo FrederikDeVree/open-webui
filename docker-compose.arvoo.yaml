@@ -28,6 +28,9 @@ services:
       - 'RAG_EMBEDDING_ENGINE=openai'
       - 'ENABLE_KB_EXEC=True'
       - 'ENABLE_LOGIN_FORM=False'
+      - 'RAG_EMBEDDING_PREFIX_FIELD_NAME=prompt_name'
+      - 'RAG_EMBEDDING_QUERY_PREFIX=web_search_query'
+      - 'RAG_EMBEDDING_CONTENT_PREFIX='
     extra_hosts:
       - host.docker.internal:host-gateway
     depends_on:
