@@ -7,6 +7,7 @@
 		getOAuthConfig,
 		updateLdapConfig,
 		updateLdapServers,
+		updateOAuthConfig,
 		updateAdminConfig
 	} from '$lib/apis/auths';
 	import { getGroups } from '$lib/apis/groups';
@@ -42,6 +43,18 @@
 	];
 
 	let oauthConfig: any = null;
+
+	const updateOAuthHandler = async () => {
+		if (!oauthConfig) return true;
+		const res = await updateOAuthConfig(localStorage.token, oauthConfig).catch((error) => {
+			toast.error(`${error}`);
+			return null;
+		});
+		if (res) {
+			oauthConfig = res;
+		}
+		return !!res;
+	};
 
 	const updateLdapServerHandler = async () => {
 		await updateLdapConfig(localStorage.token, ENABLE_LDAP);
