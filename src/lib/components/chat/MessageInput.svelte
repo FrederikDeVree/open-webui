@@ -176,6 +176,7 @@
 
 	let showValvesModal = false;
 	let showStatusPanel = false;
+	let showTerminalMenu = false;
 	let copiedStatusChatId = false;
 	let selectedValvesType = 'tool'; // 'tool' or 'function'
 	let selectedValvesItemId = null;
