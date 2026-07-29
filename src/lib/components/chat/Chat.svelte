@@ -151,7 +151,6 @@
 	let awaitingUpload = false;
 
 	let autoScroll = true;
-	$: scrollDuringGeneration = $settings?.scrollDuringGeneration ?? true;
 	let isNearTop = true;
 	let processing = '';
 	let messagesContainerElement: HTMLDivElement;
@@ -2149,7 +2148,6 @@
 	let scrollRAF = null;
 	let contentsRAF = null;
 	const scheduleResponseScrollToBottom = () => {
-		if (!scrollDuringGeneration) return;
 		if (!shouldAutoScrollResponse()) return;
 
 		if (!scrollRAF) {
