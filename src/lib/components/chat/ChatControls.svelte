@@ -56,6 +56,7 @@
 	export let codeInterpreterEnabled = false;
 
 	export let pane: Pane | null = null;
+	export let containerId = 'chat-container';
 
 	let largeScreen = false;
 	let dragged = false;
@@ -116,6 +117,7 @@
 	// Clear selected direct terminal if user lost permission
 	$: if (
 		$selectedTerminalId &&
+		$terminalServers !== null &&
 		!($terminalServers ?? []).some((t) => t.id && t.id === $selectedTerminalId) &&
 		!($user?.role === 'admin' || ($user?.permissions?.features?.direct_tool_servers ?? true))
 	) {
@@ -166,7 +168,7 @@
 
 	export const openPane = () => {
 		if (parseInt(localStorage?.chatControlsSize)) {
-			const container = document.getElementById('chat-container');
+			const container = document.getElementById(containerId);
 			let size = Math.floor(
 				(parseInt(localStorage?.chatControlsSize) / container.clientWidth) * 100
 			);
@@ -225,7 +227,7 @@
 				paneReady = true;
 			}, 0);
 
-			const container = document.getElementById('chat-container') as HTMLElement;
+			const container = document.getElementById(containerId) as HTMLElement;
 			if (!container) return;
 
 			minSize = Math.floor((350 / container.clientWidth) * 100);
@@ -309,6 +311,61 @@
 				{:else}
 					<!-- Controls + Files tabs -->
 					<div class="flex flex-col h-full min-h-0">
+						<!-- Tab bar -->
+						<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
+							<div class="flex gap-1 min-w-0 overflow-x-auto scrollbar-hidden">
+								{#if showControlsTab}
+									<button
+										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+										'controls'
+											? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+											: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+										on:click={() => (activeTab = 'controls')}
+									>
+										{$i18n.t('Controls')}
+									</button>
+								{/if}
+								{#if showFilesTab}
+									<button
+										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+										'files'
+											? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+											: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+										on:click={() => (activeTab = 'files')}
+									>
+										{$i18n.t('Files')}
+									</button>
+								{/if}
+								{#if showOverviewTab}
+									<button
+										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+										'overview'
+											? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+											: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+										on:click={() => (activeTab = 'overview')}
+									>
+										{$i18n.t('Overview')}
+									</button>
+								{/if}
+							</div>
+							<button
+								class="p-1 rounded-lg text-gray-500 dark:text-gray-400"
+								on:click={() => showControls.set(false)}
+								aria-label={$i18n.t('Close')}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="1.5"
+									class="size-4"
+								>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+
 						<div
 							class="flex-1 min-h-0 pt-2 {activeTab === 'overview'
 								? 'h-full'
@@ -323,7 +380,6 @@
 										const node = e.node;
 										showMessage(node.data.message, true);
 									}}
-									onClose={() => showControls.set(false)}
 								/>
 							{:else if activeTab === 'files' && $selectedTerminalId}
 								<FileNav onAttach={handleTerminalAttach} {chatId} />
@@ -359,7 +415,7 @@
 				if (size < minSize) {
 					localStorage.chatControlsSize = 0;
 				} else {
-					const container = document.getElementById('chat-container');
+					const container = document.getElementById(containerId);
 					localStorage.chatControlsSize = Math.floor((size / 100) * container.clientWidth);
 				}
 			}
@@ -368,15 +424,14 @@
 			if (paneReady) showControls.set(false);
 		}}
 		collapsible={true}
-		class="z-10 bg-white dark:bg-gray-850"
+		class="z-10 bg-white dark:bg-gray-900"
 	>
 		{#if $showControls}
 			<div class="flex max-h-full min-h-full">
 				<div
 					class="w-full {specialPanel && !$showCallOverlay
 						? ' '
-						: 'bg-white dark:shadow-lg dark:bg-gray-850'} z-40 pointer-events-auto {activeTab ===
-					'files'
+						: 'bg-white dark:bg-gray-900'} z-40 pointer-events-auto {activeTab === 'files'
 						? ''
 						: 'overflow-y-auto'} scrollbar-hidden"
 					id="controls-container"
@@ -400,6 +455,61 @@
 					{:else}
 						<!-- Controls + Files tabs -->
 						<div class="flex flex-col h-full min-h-0">
+							<!-- Tab bar -->
+							<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
+								<div class="flex gap-1 min-w-0 overflow-x-auto scrollbar-hidden">
+									{#if showControlsTab}
+										<button
+											class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+											'controls'
+												? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+												: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+											on:click={() => (activeTab = 'controls')}
+										>
+											{$i18n.t('Controls')}
+										</button>
+									{/if}
+									{#if showFilesTab}
+										<button
+											class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+											'files'
+												? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+												: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+											on:click={() => (activeTab = 'files')}
+										>
+											{$i18n.t('Files')}
+										</button>
+									{/if}
+									{#if showOverviewTab}
+										<button
+											class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+											'overview'
+												? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
+												: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
+											on:click={() => (activeTab = 'overview')}
+										>
+											{$i18n.t('Overview')}
+										</button>
+									{/if}
+								</div>
+								<button
+									class="p-1 rounded-lg text-gray-500 dark:text-gray-400"
+									on:click={() => showControls.set(false)}
+									aria-label={$i18n.t('Close')}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.5"
+										class="size-4"
+									>
+										<path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+									</svg>
+								</button>
+							</div>
+
 							<div
 								class="flex-1 min-h-0 pt-2 {activeTab === 'overview'
 									? 'h-full'
@@ -419,7 +529,6 @@
 											}
 											showMessage(node.data.message, true);
 										}}
-										onClose={() => showControls.set(false)}
 									/>
 								{:else if activeTab === 'files' && $selectedTerminalId}
 									<FileNav onAttach={handleTerminalAttach} overlay={dragged} {chatId} />
