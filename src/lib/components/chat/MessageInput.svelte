@@ -592,6 +592,7 @@
 	let inputFiles;
 
 	let showInputModal = false;
+	let showTerminalMenu = false;
 
 	export let dragged = false;
 	export let dropzoneId = 'chat-pane';
