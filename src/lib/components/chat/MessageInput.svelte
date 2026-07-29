@@ -592,7 +592,6 @@
 	let inputFiles;
 
 	let showInputModal = false;
-	let showTerminalMenu = false;
 
 	export let dragged = false;
 	export let dropzoneId = 'chat-pane';
@@ -2227,7 +2226,7 @@
 													$_user?.role === 'admin' ||
 													($_user?.permissions?.features?.direct_tool_servers ?? true)}
 												{#if terminalCapableModels.length > 0 && (($terminalServers ?? []).some((t) => t.id) || (hasDirectToolServerAccess && (($terminalServers ?? []).some((t) => !t.id) || ($settings?.terminalServers ?? []).some((s) => s.url))))}
-													<TerminalMenu bind:show={showTerminalMenu} />
+													<TerminalMenu />
 												{/if}
 											{/if}
 										</div>
