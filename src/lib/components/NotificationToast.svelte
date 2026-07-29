@@ -109,12 +109,15 @@
 	</button>
 
 	<div class="shrink-0 self-top -translate-y-0.5">
+		<!-- LICENSE covers this Open WebUI notification logo.
+		Do not alter, remove, obscure, or replace it except as LICENSE permits:
+		https://docs.openwebui.com/license. -->
 		<img src="{WEBUI_BASE_URL}/static/favicon.png" alt="favicon" class="size-6 rounded-full" />
 	</div>
 
 	<div>
 		{#if title}
-			<div class=" text-[13px] font-medium mb-0.5 line-clamp-1">{title}</div>
+			<div class=" text-[13px] font-normal mb-0.5 line-clamp-1">{title}</div>
 		{/if}
 
 		<div class=" line-clamp-2 text-xs self-center dark:text-gray-300 font-normal">

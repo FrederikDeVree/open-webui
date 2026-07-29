@@ -422,7 +422,7 @@ async def review_memory_after_turn(
     if not features.get('memory'):
         return
 
-    assistant_content = assistant_message.get('content', '')
+    assistant_content = get_content_from_message(assistant_message)
     if not isinstance(assistant_content, str) or not assistant_content.strip():
         return
 
@@ -479,9 +479,9 @@ async def _review_memory(
         for memory in (existing_memories or [])[:80]
     ]
 
-    assistant_content = assistant_message.get('content', '')
+    assistant_content = get_content_from_message(assistant_message)
     if not isinstance(assistant_content, str):
-        assistant_content = get_content_from_message(assistant_message)
+        assistant_content = ''
 
     transcript_lines = []
     for message in messages[-16:]:
@@ -565,6 +565,9 @@ Conversation:
             'messages': [
                 {
                     'role': 'system',
+                    # LICENSE covers this Open WebUI system identifier.
+                    # Do not alter, remove, obscure, or replace it except as LICENSE permits:
+                    # https://docs.openwebui.com/license.
                     'content': "You are Open WebUI's private memory reviewer. Return only valid JSON.",
                 },
                 {'role': 'user', 'content': review_prompt},

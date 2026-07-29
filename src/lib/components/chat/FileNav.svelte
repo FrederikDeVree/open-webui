@@ -545,22 +545,34 @@
 		fileLoading = false;
 	};
 
+	let downloading = false;
+
 	const downloadFile = async (path: string) => {
 		const terminal = selectedTerminal;
-		if (!terminal) return;
+		if (!terminal || downloading) return;
 
-		// Directories end with '/' — download as ZIP archive
-		const isDir = path.endsWith('/');
-		const result = isDir
-			? await archiveFromTerminal(terminal.url, terminal.key, [path.replace(/\/$/, '')])
-			: await downloadFileBlob(terminal.url, terminal.key, path, chatId ?? undefined);
-		if (!result) return;
-		const url = URL.createObjectURL(result.blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = result.filename;
-		a.click();
-		URL.revokeObjectURL(url);
+		downloading = true;
+		const toastId = toast.loading($i18n.t('Preparing download...'));
+		try {
+			// Directories end with '/', downloaded as a ZIP archive
+			const isDir = path.endsWith('/');
+			const result = isDir
+				? await archiveFromTerminal(terminal.url, terminal.key, [path.replace(/\/$/, '')])
+				: await downloadFileBlob(terminal.url, terminal.key, path, chatId ?? undefined);
+			if (!result) {
+				toast.error($i18n.t('Download failed'));
+				return;
+			}
+			const url = URL.createObjectURL(result.blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = result.filename;
+			a.click();
+			URL.revokeObjectURL(url);
+		} finally {
+			toast.dismiss(toastId);
+			downloading = false;
+		}
 	};
 
 	// ── Drag-and-drop upload ─────────────────────────────────────────────
@@ -852,7 +864,7 @@
 
 	const bulkDownload = async () => {
 		const terminal = selectedTerminal;
-		if (!terminal) return;
+		if (!terminal || downloading) return;
 
 		const paths = [...selectedEntries].map((p) => p.replace(/\/$/, ''));
 		if (paths.length === 0) return;
@@ -863,15 +875,25 @@
 			return;
 		}
 
-		// Archive everything into a single ZIP
-		const result = await archiveFromTerminal(terminal.url, terminal.key, paths);
-		if (!result) return;
-		const url = URL.createObjectURL(result.blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = result.filename;
-		a.click();
-		URL.revokeObjectURL(url);
+		downloading = true;
+		const toastId = toast.loading($i18n.t('Preparing download...'));
+		try {
+			// Archive everything into a single ZIP
+			const result = await archiveFromTerminal(terminal.url, terminal.key, paths);
+			if (!result) {
+				toast.error($i18n.t('Download failed'));
+				return;
+			}
+			const url = URL.createObjectURL(result.blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = result.filename;
+			a.click();
+			URL.revokeObjectURL(url);
+		} finally {
+			toast.dismiss(toastId);
+			downloading = false;
+		}
 	};
 
 	// Escape to clear selection
@@ -890,9 +912,8 @@
 	};
 
 	// ── Lifecycle ────────────────────────────────────────────────────────
-	onMount(async () => {
+	onMount(() => {
 		const terminal = getTerminal();
-		if (!terminal) return;
 
 		let handledDisplayFile = false;
 
@@ -947,29 +968,21 @@
 			}
 		});
 
-		if (!handledDisplayFile) {
+		if (!handledDisplayFile && terminal) {
 			loading = true;
 
-			// Discover server features on initial mount
-			const config = await getTerminalConfig(terminal.url, terminal.key);
-			terminalEnabled = config?.features?.terminal !== false;
+			void (async () => {
+				// Discover server features on initial mount
+				const config = await getTerminalConfig(terminal.url, terminal.key);
+				terminalEnabled = config?.features?.terminal !== false;
 
-			// Detect the user's home directory (global server default, no session)
-			const rawHome = await getCwd(terminal.url, terminal.key, undefined);
-			const resolvedHome = rawHome?.cwd ? normalizePath(rawHome.cwd) : null;
-			homePath =
-				resolvedHome && resolvedHome !== '/'
-					? resolvedHome.endsWith('/')
-						? resolvedHome
-						: resolvedHome + '/'
-					: null;
-
-			if (chatId || savedPath === null) {
-				// Fetch session-specific cwd from the server (or global default for new chats)
-				savedPath = applyCwd(await getCwd(terminal.url, terminal.key, chatId ?? undefined));
-			}
-			savedPath = clampToFileRoot(savedPath);
-			loadDir(savedPath);
+				if (chatId || savedPath === '/') {
+					// Fetch session-specific cwd from the server (or global default for new chats)
+					savedPath = applyCwd(await getCwd(terminal.url, terminal.key, chatId ?? undefined));
+				}
+				savedPath = clampToFileRoot(savedPath);
+				loadDir(savedPath);
+			})();
 		}
 
 		mounted = true;
@@ -1447,7 +1460,7 @@
 						<Spinner className="size-4" />
 						{$i18n.t('Uploading...')}
 					</div>
-				{:else if loading}
+				{:else if loading || ($selectedTerminalId && $terminalServers === null)}
 					<div class="flex justify-center pt-8"><Spinner className="size-4" /></div>
 				{:else if error}
 					<div class="p-4 text-xs">{error}</div>
@@ -1463,7 +1476,7 @@
 					</div>
 				{/if}
 
-				{#if !loading && !error && !uploading}
+				{#if !loading && !error && !uploading && !($selectedTerminalId && $terminalServers === null)}
 					{#if creatingFolder}
 						<div class="flex items-center gap-2 px-3 py-1.5">
 							<Folder className="size-4 shrink-0 text-blue-400 dark:text-blue-300" />
@@ -1580,7 +1593,7 @@
 							clip-rule="evenodd"
 						/>
 					</svg>
-					<span class="font-medium">{$i18n.t('Terminal')}</span>
+					<span class="font-normal">{$i18n.t('Terminal')}</span>
 
 					{#if terminalExpanded}
 						<div
