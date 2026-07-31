@@ -92,6 +92,7 @@
 				: 'text-gray-600 dark:text-gray-300 opacity-50 hover:bg-gray-50/40 dark:hover:bg-gray-800/40 hover:text-gray-700 dark:hover:text-gray-200'}"
 		>
 			<Cloud className="size-3.5" strokeWidth="2" />
+			<span class="truncate">{$i18n.t('Terminal')}</span>
 		</button>
 	</Tooltip>
 </div>
