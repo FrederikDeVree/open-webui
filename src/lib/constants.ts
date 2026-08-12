@@ -7,7 +7,7 @@ import { browser, dev } from '$app/environment';
 // https://docs.openwebui.com/license.
 export const APP_NAME = 'Open WebUI';
 
-export const WEBUI_HOSTNAME = browser ? (dev ? `${location.hostname}:8080` : ``) : '';
+export const WEBUI_HOSTNAME = browser ? (dev ? `192.168.0.26:3002` : ``) : '';
 export const WEBUI_BASE_URL = browser ? (dev ? `http://${WEBUI_HOSTNAME}` : ``) : ``;
 export const WEBUI_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1`;
 

@@ -1234,3 +1234,24 @@ OTEL_METRICS_OTLP_SPAN_EXPORTER = os.getenv(
 OTEL_LOGS_OTLP_SPAN_EXPORTER = os.getenv(
     'OTEL_LOGS_OTLP_SPAN_EXPORTER', OTEL_OTLP_SPAN_EXPORTER
 ).lower()  # grpc or http
+
+
+####################################
+# SMTP / Email
+####################################
+
+SMTP_HOST = os.getenv('SMTP_HOST', '')
+try:
+    SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+except ValueError:
+    SMTP_PORT = 587
+SMTP_USERNAME = os.getenv('SMTP_USERNAME', '')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', SMTP_USERNAME)
+# STARTTLS on the plain connection (typically port 587)
+SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'True').lower() == 'true'
+# Implicit TLS from the start of the connection (typically port 465)
+SMTP_USE_SSL = os.getenv('SMTP_USE_SSL', 'False').lower() == 'true'
+
+# Recipient address that receives a copy of every submitted feedback, if set.
+FEEDBACK_NOTIFICATION_EMAIL = os.getenv('FEEDBACK_NOTIFICATION_EMAIL', '')

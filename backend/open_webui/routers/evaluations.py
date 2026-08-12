@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from open_webui.constants import ERROR_MESSAGES
+from open_webui.env import FEEDBACK_NOTIFICATION_EMAIL
 from open_webui.events import EVENTS, publish_event
 from open_webui.internal.db import get_async_session
 from open_webui.models.config import Config
@@ -19,6 +20,7 @@ from open_webui.models.feedbacks import (
 )
 from open_webui.models.users import UserModel, Users
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.mail import send_email
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -405,6 +407,22 @@ async def get_feedbacks(
     return result
 
 
+def _format_feedback_email(feedback: FeedbackModel, user: UserModel) -> str:
+    data = feedback.data or {}
+    lines = [
+        f'Feedback ID: {feedback.id}',
+        f'Submitted by: {user.name} ({user.email})',
+        f'Type: {feedback.type}',
+        f"Rating: {data.get('rating')}",
+        f"Model: {data.get('model_id')}",
+    ]
+    if data.get('reason'):
+        lines.append(f"Reason: {data.get('reason')}")
+    if data.get('comment'):
+        lines.append(f"Comment: {data.get('comment')}")
+    return '\n'.join(lines)
+
+
 @router.post('/feedback', response_model=FeedbackModel)
 async def create_feedback(
     request: Request,
@@ -426,6 +444,14 @@ async def create_feedback(
         subject_id=feedback.id,
         data={'rating': (feedback.data or {}).get('rating')},
     )
+
+    if FEEDBACK_NOTIFICATION_EMAIL:
+        await send_email(
+            to_email=FEEDBACK_NOTIFICATION_EMAIL,
+            subject=f'New Feedback Submitted ({feedback.type})',
+            body=_format_feedback_email(feedback, user),
+        )
+
     return feedback
 
 
