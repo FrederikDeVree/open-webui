@@ -409,10 +409,12 @@ async def get_feedbacks(
 
 def _format_feedback_email(feedback: FeedbackModel, user: UserModel) -> str:
     data = feedback.data or {}
+    meta = feedback.meta or {}
     lines = [
         f'Feedback ID: {feedback.id}',
         f'Submitted by: {user.name} ({user.email})',
         f'Type: {feedback.type}',
+        f"Chat ID: {meta.get('chat_id')}",
         f"Rating: {data.get('rating')}",
         f"Model: {data.get('model_id')}",
     ]
