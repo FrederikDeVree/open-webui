@@ -1083,7 +1083,7 @@
 											aria-label={$i18n.t('Insert into note')}
 											class="{isLastMessage || ($settings?.highContrastMode ?? false)
 												? 'visible'
-												: 'invisible group-hover:visible'} rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white"
+												: 'invisible group-hover:visible'} rounded-lg px-2 py-1.5 text-xs transition hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white"
 											on:click={() => {
 												onInsertToNote?.(visibleResponseContent);
 											}}
@@ -1493,9 +1493,11 @@
 												aria-label={$i18n.t('Feedback')}
 												class="{isLastMessage || ($settings?.highContrastMode ?? false)
 													? 'visible'
-													: 'invisible group-hover:visible'} rounded-lg px-2 py-1.5 text-xs text-gray-500 transition hover:bg-black/5 hover:text-black dark:hover:bg-white/5 dark:hover:text-white"
+													: 'invisible group-hover:visible'} rounded-lg px-2 py-1.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/5 {showRateComment
+													? 'text-black dark:text-white bg-black/5 dark:bg-white/5'
+													: 'hover:text-black dark:hover:text-white'}"
 												on:click={() => {
-													showRateComment = true;
+													showRateComment = !showRateComment;
 												}}
 											>
 												{$i18n.t('Feedback')}

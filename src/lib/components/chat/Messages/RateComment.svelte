@@ -41,7 +41,7 @@
 	id="message-feedback-{message.id}"
 >
 	<div class="flex justify-between items-center">
-		<div class="text-sm font-normal">
+		<div class="text-sm font-normal italic">
 			{$i18n.t('Feedback will be emailed directly to the AI Server Development team')}
 		</div>
 		<button
@@ -73,7 +73,7 @@
 				saveHandler();
 			}}
 		>
-			{$i18n.t('Save')}
+			{$i18n.t('Send')}
 		</button>
 	</div>
 </div>
