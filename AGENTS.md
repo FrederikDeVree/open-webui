@@ -280,7 +280,9 @@ Global config to default file attachments to full-context mode.
 	folder upload + `$terminalServers === null` loading guards.
 - **Local-only files to preserve** (not in upstream, easy to lose): `src/lib/utils/pyodide.ts`, `src/lib/utils/terminal.ts`
 	(delete once item 1 is fully dropped), `AGENTS.md`, the two local Alembic migrations
-	(`4a1b2c3d4e5f_add_ldap_servers_config.py`, `merge_heads_4a1b2c_f0bd01.py`), `backend/tests/test_ldap_servers.py`,
+	(`4a1b2c3d4e5f_add_ldap_servers_config.py`, `merge_heads_4a1b2c_f0bd01.py`,
+	`merge_heads_5f6a7b_d4c1a8.py` — merges upstream's `d4c1a8e37b62` (chat `timer_at`) with local `5f6a7b8c9d0e`,
+	added 2026-08-26 after the v0.11.1 merge created two heads), `backend/tests/test_ldap_servers.py`,
 	`docker-compose.arvoo.yaml` / `docker-compose.dev-arvoo.yaml`, `backup-postgres.sh` / `restore-postgres.sh`.
 - **Verify after a merge** (quick greps): `homePath` in `FileNav.svelte`; `LDAP_SERVERS` in `Authentication.svelte` +
 	`/admin/config/ldap/servers` in `auths.py`; `RAG_FILE_FULL_CONTEXT` in `config.py` + `Documents.svelte`; `kbFullContext` in
