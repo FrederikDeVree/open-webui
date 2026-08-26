@@ -106,6 +106,8 @@ from open_webui.utils.misc import (
     add_or_update_system_message,
     add_or_update_user_message,
     convert_output_to_messages,
+    convert_logit_bias_input_to_json,
+    deep_update,
     extract_urls,
     get_content_from_message,
     get_last_assistant_message,
