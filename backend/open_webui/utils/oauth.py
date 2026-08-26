@@ -202,14 +202,6 @@ DEFAULT_TOKEN_EXPIRY_SECONDS = 3600
 NON_EXPIRING_TOKEN_EXPIRES_AT = 253402300799  # 9999-12-31 23:59:59 UTC
 
 
-# Apereo CAS includes client_id in ID token JWS headers; Authlib 1.7/joserfc
-# rejects unknown headers unless we register the provider extension.
-JWSRegistry.default_header_registry.setdefault(
-    'client_id',
-    HeaderParameter('OAuth client identifier', 'str'),
-)
-
-
 def _normalize_token_expiry(token: dict) -> dict:
     """Ensure a token dict always has a numeric ``expires_at``.
 
