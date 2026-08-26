@@ -57,7 +57,10 @@
 		: 'gap-1 rounded-2xl p-1.5'} text-left"
 	type="button"
 	on:click={async () => {
-		const filesystemPath = item?.type === 'filesystem' ? (item.path ?? item.url ?? item.id) : null;
+		const filesystemPath =
+			item?.type === 'filesystem'
+				? (item.path ?? item.url ?? item.id)
+				: item?.terminal_path ?? null;
 
 		if (filesystemPath) {
 			showFileNavPath.set(filesystemPath);

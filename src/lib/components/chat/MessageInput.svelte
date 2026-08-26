@@ -883,17 +883,28 @@
 	) => {
 		if (!selectedId) return null;
 
+		const wantsTerminalUpload = (mode: string | undefined) =>
+			mode === 'filesystem' || mode === 'both';
+
 		const systemTerminal = (servers ?? []).find(
-			(t: any) => t.id && t.id === selectedId && t.config?.chat_uploads === 'filesystem'
+			(t: any) => t.id && t.id === selectedId && wantsTerminalUpload(t.config?.chat_uploads)
 		);
 		if (systemTerminal) return systemTerminal;
 
 		return (
 			(settingsValue?.terminalServers ?? []).find(
-				(t: any) => t.url === selectedId && t.enabled && t.config?.chat_uploads === 'filesystem'
+				(t: any) => t.url === selectedId && t.enabled && wantsTerminalUpload(t.config?.chat_uploads)
 			) ?? null
 		);
 	};
+
+	const isTerminalOnlyUpload = (
+		selectedId = $selectedTerminalId,
+		servers: any[] | null = $terminalServers,
+		settingsValue: any = $settings
+	) =>
+		getFilesystemUploadTerminal(selectedId, servers, settingsValue)?.config?.chat_uploads ===
+		'filesystem';
 
 	const uploadFileHandler = async (file, process = true, itemData = {}) => {
 		if ($_user?.role !== 'admin' && !($_user?.permissions?.chat?.file_upload ?? true)) {
@@ -903,7 +914,10 @@
 
 		const filesystemUploadTerminal = getFilesystemUploadTerminal();
 
-		if (!filesystemUploadTerminal && fileUploadCapableModels.length !== selectedModelIds.length) {
+		// In 'filesystem' mode the file only goes to the terminal, so the model's
+		// file-upload capability is irrelevant. In 'default' and 'both' modes the
+		// file is attached to the chat context, so the model must support it.
+		if (!isTerminalOnlyUpload() && fileUploadCapableModels.length !== selectedModelIds.length) {
 			toast.error($i18n.t('Model(s) do not support file upload'));
 			return null;
 		}
@@ -933,7 +947,10 @@
 
 		files = [...files, fileItem];
 
-		if (filesystemUploadTerminal) {
+		const chatUploadMode = filesystemUploadTerminal?.config?.chat_uploads;
+
+		if (filesystemUploadTerminal && (chatUploadMode === 'filesystem' || chatUploadMode === 'both')) {
+			let terminalUploadSucceeded = false;
 			try {
 				const cwd =
 					(
@@ -952,30 +969,46 @@
 				);
 
 				if (uploadedFile) {
-					fileItem.type = 'filesystem';
-					fileItem.status = 'uploaded';
-					fileItem.id = uploadedFile.path;
-					fileItem.path = uploadedFile.path;
-					fileItem.url = uploadedFile.path;
-					fileItem.size = uploadedFile.size ?? file.size;
-					fileItem.file = uploadedFile;
-					files = files;
-					showFileNavDir.set(uploadedFile.path);
-				} else {
+					fileItem.terminal_path = uploadedFile.path;
+					terminalUploadSucceeded = true;
+					if (chatUploadMode === 'filesystem') {
+						// Terminal-only: the file lives on the terminal, not in the chat context.
+						fileItem.type = 'filesystem';
+						fileItem.status = 'uploaded';
+						fileItem.id = uploadedFile.path;
+						fileItem.path = uploadedFile.path;
+						fileItem.url = uploadedFile.path;
+						fileItem.size = uploadedFile.size ?? file.size;
+						fileItem.file = uploadedFile;
+						files = files;
+						showFileNavDir.set(uploadedFile.path);
+					}
+				}
+			} catch (e) {
+				console.error('Failed to upload file to terminal:', e);
+			}
+
+			if (chatUploadMode === 'filesystem') {
+				// Terminal-only mode: the terminal upload is the entire operation.
+				if (!terminalUploadSucceeded) {
 					fileItem.status = 'error';
 					fileItem.error = $i18n.t('Failed to upload file.');
 					toast.error(fileItem.error);
 					files = files.filter((item) => item?.itemId !== tempItemId);
 				}
-			} catch (e) {
-				fileItem.status = 'error';
-				fileItem.error = `${e}`;
-				toast.error(`${e}`);
-				files = files.filter((item) => item?.itemId !== tempItemId);
-			} finally {
 				onUpdate({ file: fileItem });
+				return;
 			}
-			return;
+
+			// 'both' mode: the terminal upload is best-effort; the file is always
+			// attached to the chat context below.
+			if (!terminalUploadSucceeded) {
+				toast.warning(
+					$i18n.t(
+						'Could not upload the file to the terminal; it has been attached to the chat instead.'
+					)
+				);
+			}
 		}
 
 		if (!$temporaryChatEnabled) {
@@ -2180,11 +2213,7 @@
 									<InputMenu
 										bind:files
 										selectedModels={selectedModelIds}
-										fileUploadCapableModels={getFilesystemUploadTerminal(
-											$selectedTerminalId,
-											$terminalServers,
-											$settings
-										)
+										fileUploadCapableModels={isTerminalOnlyUpload()
 											? selectedModelIds
 											: fileUploadCapableModels}
 										{toolApprovalMode}

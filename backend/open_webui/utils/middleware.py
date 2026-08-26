@@ -1996,6 +1996,8 @@ async def add_file_context(messages: list, chat_id: str, user) -> list:
         attrs = f'type="{file.get("type", "file")}" id="{file.get("id") or file.get("url")}"'
         if file.get('url'):
             attrs += f' url="{file["url"]}"'
+        if file.get('terminal_path'):
+            attrs += f' terminal_path="{file["terminal_path"]}"'
         if file.get('content_type'):
             attrs += f' content_type="{file["content_type"]}"'
         if file.get('name'):

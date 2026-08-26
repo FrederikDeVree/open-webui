@@ -376,6 +376,8 @@
 	"BM25 Weight": "",
 	"Bocha Search API Key": "",
 	"Bold": "",
+	"Both": "",
+	"Could not upload the file to the terminal; it has been attached to the chat instead.": "",
 	"Boosting or penalizing specific tokens for constrained responses. Bias values will be clamped between -100 and 100 (inclusive). (Default: none)": "",
 	"Brave": "",
 	"Brave Search API Key": "",

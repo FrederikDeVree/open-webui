@@ -36,7 +36,7 @@
 	let auth_type = 'bearer';
 	let path = '/openapi.json';
 	let enabled = false;
-	let chatUploads: 'default' | 'filesystem' = 'default';
+	let chatUploads: 'default' | 'filesystem' | 'both' = 'default';
 	let chatContextMode: 'default' | 'chat_id' | 'off' = 'default';
 	let automationContextMode: 'default' | 'automation_id' | 'off' = 'default';
 	let showAdvanced = false;
@@ -81,7 +81,12 @@
 			auth_type = connection?.auth_type ?? 'bearer';
 			path = connection?.path ?? '/openapi.json';
 			enabled = connection?.enabled ?? true;
-			chatUploads = connection?.config?.chat_uploads === 'filesystem' ? 'filesystem' : 'default';
+			chatUploads =
+				connection?.config?.chat_uploads === 'filesystem'
+					? 'filesystem'
+					: connection?.config?.chat_uploads === 'both'
+						? 'both'
+						: 'default';
 			accessGrants = connection?.config?.access_grants ?? [];
 
 			// Restore policy state
@@ -384,6 +389,7 @@
 		if (useContexts) connectionConfig.contexts = contexts;
 		else delete connectionConfig.contexts;
 		if (chatUploads === 'filesystem') connectionConfig.chat_uploads = 'filesystem';
+		else if (chatUploads === 'both') connectionConfig.chat_uploads = 'both';
 		else delete connectionConfig.chat_uploads;
 
 		const result = {
@@ -556,6 +562,7 @@
 									>
 										<option value="default">{$i18n.t('Default')}</option>
 										<option value="filesystem">{$i18n.t('Filesystem')}</option>
+										<option value="both">{$i18n.t('Both')}</option>
 									</select>
 								</div>
 							</div>
