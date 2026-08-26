@@ -198,7 +198,7 @@
 	});
 </script>
 
-<form class="flex h-full flex-col justify-between text-sm" on:submit|preventDefault={submitHandler}>
+<form class="flex h-full flex-col justify-between text-sm" onsubmit={(e) => { e.preventDefault(); submitHandler(); }}>
 	<h2 class="text-sm font-medium text-gray-900 dark:text-white mb-4">
 		{$i18n.t('Authentication')}
 	</h2>
