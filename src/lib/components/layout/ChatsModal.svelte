@@ -11,7 +11,8 @@
 
 	import { deleteChatById } from '$lib/apis/chats';
 	import { WEBUI_API_BASE_URL } from '$lib/constants';
-	import { formatNumber, copyToClipboard } from '$lib/utils';
+	import { formatNumber } from '$lib/utils';
+
 	import Modal from '$lib/components/common/Modal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
@@ -346,7 +347,7 @@
 																e.stopImmediatePropagation();
 																e.stopPropagation();
 																const shareUrl = `${window.location.origin}/s/${chat.share_id}`;
-																await copyToClipboard(shareUrl);
+																await navigator.clipboard.writeText(shareUrl);
 																toast.success($i18n.t('Share link copied to clipboard.'));
 															}}
 														>

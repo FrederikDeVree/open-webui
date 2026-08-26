@@ -165,3 +165,101 @@ open-webui/
 - **No project-level frontend test files found** (only `vitest` config for `test:frontend`). Cypress is available for E2E (`cy:open`).
 - **Svelte 5**: Uses runes syntax (`$state`, `$derived`, `$effect`, `$props`, `$bindable`). Avoid legacy Svelte 4 patterns.
 - **Environment**: See `.env.example` for all configurable variables. The `hatch_build.py` hooks customize the wheel build.
+
+## LOCAL (dev-arvoo) CUSTOM CHANGES
+
+This branch (`dev-arvoo`, based on upstream 0.11.0) carries the following local changes on top of upstream.
+Identify them by author `frederik@arvoo.com`. The big bundle is the consolidation commit `d2a8e93bc`
+("dev-arvoo: consolidate changes on clean origin/dev base"); the rest are individual feature/fix commits.
+When merging upstream, preserve these unless explicitly superseded (see status notes).
+
+### 1. Terminal file access & downloads (user feature)
+Let the user browse/download files from connected terminal servers, and make model-produced file paths clickable.
+- `src/lib/utils/terminal.ts` (new file) — `TERMINAL_DOWNLOAD_SCHEME` (`terminal-download://`), `TERMINAL_PATH_RE`
+	(absolute POSIX path + extension), `downloadTerminalFile()` (downloads via `downloadFileBlob` from the selected terminal).
+- `src/lib/components/chat/Messages/Markdown/MarkdownInlineTokens.svelte` + `.../MarkdownInlineTokens/CodespanToken.svelte` —
+	intercept `terminal-download://` links and terminal-path code spans, render as clickable download buttons.
+- `src/lib/components/chat/FileNav.svelte` + `FileNav/FileNavToolbar.svelte` — per-terminal **home directory** clamping:
+	`homePath` + `clampToHome()` keep navigation below the terminal's home; breadcrumbs built from `homePath`;
+	home re-detected via `getCwd` on terminal switch.
+- `src/routes/+layout.svelte` — terminal server mapping (proxy URL + session key for FileNav browsing).
+- `backend/open_webui/routers/terminals.py`, `backend/open_webui/utils/terminals.py` — terminal proxy/context utilities.
+- **Status:** the "clickable markdown path" part (`terminal-download://` + `TERMINAL_PATH_RE` + `downloadTerminalFile`
+	+ the two Markdown token files) is **superseded by upstream's `display_file` tool** (upstream 0.11.1: `TerminalOutputFile.svelte`,
+	`terminalFileDisplay` setting, `terminal:display_file` socket event). Decision: **drop the clickable-path part, keep upstream's
+	`display_file`**. The `FileNav` `homePath`/`clampToHome` clamping and the terminal proxy utils remain local and should be kept.
+
+### 2. Send message while attachments upload (user feature — SUPERSEDED)
+Block-and-wait: while non-image files are still `uploading`, the send handler polls until they finish.
+- `src/lib/components/chat/Chat.svelte` — `let awaitingUpload = false;` + a 100 ms polling block in the send handler;
+	passes `uploadPending={awaitingUpload}` to `MessageInput` (two instances).
+- `src/lib/components/chat/MessageInput.svelte` — `export let uploadPending = false;`; send button disabled + spinner +
+	"Waiting for upload..." tooltip while `uploadPending`.
+- **Status:** **superseded by upstream's queue** (`chatRequestQueues` store, `processNextInQueue`, `QueuedMessageItem.svelte`,
+	`messageQueue` prop). Decision: **drop this, use upstream's queue.**
+
+### 3. Mermaid / Vega diagram rendering (user feature)
+Client-side diagram rendering with SVG→PNG rasterization for LLM visual feedback and self-correction.
+- `src/lib/utils/index.ts` — `initMermaid` (native SVG `<text>` labels via `htmlLabels:false`, `wrappingWidth`),
+	`renderMermaidDiagram` (off-screen 1100px container so gantt charts read a real width),
+	`convertForeignObjectsToSvgText` (foreignObject→`<text>` so labels survive PNG), `svgToPng` (data-URI canvas, untainted).
+- `src/routes/+layout.svelte` — `executeDiagram` handler for the `execute:diagram` socket event (mermaid/vega/vega-lite → svg+png).
+- `backend/open_webui/utils/middleware.py` — `open_webui:diagram_renderer` output type + a diagram-renderer loop that scans
+	accumulated content for mermaid/vega/vega-lite blocks and feeds errors/PNG back to the model.
+- `src/lib/components/chat/Messages/Markdown.svelte`, `MarkdownTokens.svelte`, `ConsecutiveDetailsGroup.svelte`,
+	`ResponseMessage.svelte` — render the diagram blocks.
+
+### 4. Pyodide file downloads (user feature)
+- `src/lib/utils/pyodide.ts` (new file) — `sendPyodideWorkerMessage`, `downloadPyodideFile`, `PYODIDE_DOWNLOAD_SCHEME`
+	(`pyodide-download://`), `linkifyPyodidePaths` (turns bare `/mnt/uploads/...` paths into download links, skipping code spans).
+- `src/lib/components/chat/Messages/Markdown.svelte` / markdown pipeline — consumes the pyodide download scheme.
+
+### 5. Multiple LDAP servers (user feature)
+Authenticate against a list of LDAP servers (continue-on-failure) instead of a single one.
+- `backend/open_webui/config.py` — `ldap_servers` config (list).
+- `backend/open_webui/routers/auths.py` — `ldap_auth` loops over all configured servers (continue instead of break on failure).
+- `backend/open_webui/migrations/versions/4a1b2c3d4e5f_add_ldap_servers_config.py` — migration.
+- `backend/tests/test_ldap_servers.py` — tests.
+- `src/lib/apis/auths/index.ts`, `src/lib/components/admin/Settings/Authentication.svelte` — admin UI for multiple servers.
+- **Status:** upstream 0.11.1 refactored `auths.py` (single-server flow + group creation + SSO events). The local `ldap_auth`
+	is a **superset** — it already includes upstream's group-creation/event code wrapped in the multi-server loop. Keep the local version.
+
+### 6. Per-knowledge-base full-context retrieval toggle (user feature)
+Per-KB toggle to default file attachments to full-context retrieval mode.
+- `backend/open_webui/models/knowledge.py` — `context` field on `KnowledgeForm` (excluded from update in KnowledgeTable).
+- `backend/open_webui/retrieval/utils.py`, `backend/open_webui/routers/knowledge.py` — retrieval plumbing.
+- `src/lib/apis/knowledge/index.ts`, `src/lib/components/workspace/Knowledge/KnowledgeBase.svelte`,
+	`src/lib/components/workspace/Models/Knowledge.svelte`, `.../Knowledge/KnowledgeSelector.svelte` — UI toggle.
+
+### 7. RAG_FILE_FULL_CONTEXT default (user feature)
+Global config to default file attachments to full-context mode.
+- `backend/open_webui/config.py` — `RAG_FILE_FULL_CONTEXT`.
+- `backend/open_webui/routers/retrieval.py`, `backend/open_webui/utils/middleware.py` — apply it.
+- `src/lib/components/admin/Settings/Documents.svelte`, `src/lib/components/common/FileItemModal.svelte`,
+	`src/lib/stores/index.ts` — admin toggle + reactive `$config` usage.
+
+### 8. Builtin knowledge tool rename + default counts (user feature)
+- `backend/open_webui/tools/builtin.py`, `backend/open_webui/utils/middleware.py`, `backend/open_webui/utils/tools.py` —
+	renamed `query_knowledge_files` → `search_knowledge_files` + `list_knowledge_files`.
+- Default counts: `search_knowledge_files` count 50, default query count 10 (`backend/open_webui/tools/builtin.py`).
+- **Status:** upstream kept the old name. Preserve the local rename consistently across all references.
+
+### 9. Per-request embedding cache (user feature)
+- `backend/open_webui/retrieval/utils.py`, `backend/open_webui/routers/retrieval.py` — `request.state.embedding_cache`
+	to avoid redundant embedding generation within a request (passed as `cache=` to the embed call).
+
+### 10. Misc local fixes
+- `src/lib/components/layout/ChatsModal.svelte` — use `copyToClipboard` utility instead of `navigator.clipboard`.
+- `Dockerfile` — increase Node.js heap size to avoid OOM during build.
+- `docker-compose.dev-arvoo.yaml` — dev-specific postgres + volumes, vector DB, login form enabled in dev, port fixes.
+- `docker-compose.arvoo.yaml` — RAG embedding support for non-dev container.
+- `backend/open_webui/migrations/versions/1ff6ce645...` — Alembic migration to merge DB heads.
+- `AGENTS.md` — this knowledge base file.
+
+### Merge notes (upstream/dev → 0.11.1)
+- **Take upstream** for: `aiodns` (upstream pins 3.6.1; local had 4.0.4 — use upstream, opt-in via `AIOHTTP_CLIENT_ASYNC_DNS_RESOLVER`),
+	`utils/timers.py` (column-based `Chat.timer_at`, fixes #27663), the moved/refactored model-normalization + context-usage block in
+	`Chat.svelte` (upstream moved it; a new copy using `getUsageTokenCount` sits just below the old location), and all px→rem unit
+	conversions (upstream's "Interface scaling" work).
+- **Drop** local test deps `moto[s3]`, `docker`, `pytest`, `pytest-docker` from `pyproject.toml` `[all]` and `uv.lock`.
+- **Keep** local: items 1 (FileNav home-path + terminal proxy), 3, 4, 5, 6, 7, 8, 9, 10.

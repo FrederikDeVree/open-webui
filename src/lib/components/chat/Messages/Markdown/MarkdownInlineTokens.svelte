@@ -11,8 +11,6 @@
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { copyToClipboard, unescapeHtml } from '$lib/utils';
 	import { downloadPyodideFile, PYODIDE_DOWNLOAD_SCHEME } from '$lib/utils/pyodide';
-	import { downloadTerminalFile, TERMINAL_DOWNLOAD_SCHEME, TERMINAL_PATH_RE } from '$lib/utils/terminal';
-	import { terminalServers } from '$lib/stores';
 
 	import Image from '$lib/components/common/Image.svelte';
 	import KatexRenderer from './KatexRenderer.svelte';
@@ -60,37 +58,8 @@
 			});
 			return;
 		}
-		if (href.startsWith(TERMINAL_DOWNLOAD_SCHEME)) {
-			e.preventDefault();
-			const filePath = href.slice(TERMINAL_DOWNLOAD_SCHEME.length);
-			downloadTerminalFile(filePath).then((ok) => {
-				if (!ok) toast.error($i18n.t('Failed to download file'));
-			});
-			return;
-		}
 		try {
 			const url = new URL(href, window.location.origin);
-			// Check if the link points to a terminal file path:
-			// - same-origin URL whose pathname looks like a terminal file path, or
-			// - a URL whose origin matches a known terminal server
-			const servers = $terminalServers as Array<{ id: string; url: string; key: string }>;
-			const isTerminalServerOrigin = servers.some((s) => {
-				try {
-					return new URL(s.url).origin === url.origin;
-				} catch {
-					return false;
-				}
-			});
-			if (
-				(url.origin === window.location.origin || isTerminalServerOrigin) &&
-				TERMINAL_PATH_RE.test(url.pathname)
-			) {
-				e.preventDefault();
-				downloadTerminalFile(url.pathname).then((ok) => {
-					if (!ok) toast.error($i18n.t('Failed to download file'));
-				});
-				return;
-			}
 			// Check if same origin and an in-app route
 			if (
 				url.origin === window.location.origin &&
@@ -115,7 +84,6 @@
 	{:else if token.type === 'link'}
 		{@const noteId = getNoteIdFromHref(token.href)}
 		{@const isPyodideDownload = token.href.startsWith(PYODIDE_DOWNLOAD_SCHEME)}
-		{@const isTerminalDownload = token.href.startsWith(TERMINAL_DOWNLOAD_SCHEME)}
 		{#if isPyodideDownload}
 			{@const filePath = token.href.slice(PYODIDE_DOWNLOAD_SCHEME.length)}
 			<!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -125,37 +93,6 @@
 				title={filePath}
 				on:click={() =>
 					downloadPyodideFile(filePath).then((ok) => {
-						if (!ok) toast.error($i18n.t('Failed to download file'));
-					})}
-			>
-				{#if token.tokens}
-					<svelte:self id={`${id}-a`} tokens={token.tokens} {onSourceClick} {done} />
-				{:else}
-					{token.text ?? filePath.split('/').pop()}
-				{/if}
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 16 16"
-					fill="currentColor"
-					class="size-3 shrink-0 opacity-70"
-				>
-					<path
-						d="M8.75 2.75a.75.75 0 0 0-1.5 0v5.69L5.03 6.22a.75.75 0 0 0-1.06 1.06l3.5 3.5a.75.75 0 0 0 1.06 0l3.5-3.5a.75.75 0 0 0-1.06-1.06L8.75 8.44V2.75Z"
-					/>
-					<path
-						d="M3.5 9.75a.75.75 0 0 0-1.5 0v1.5A2.75 2.75 0 0 0 4.75 14h6.5A2.75 2.75 0 0 0 14 11.25v-1.5a.75.75 0 0 0-1.5 0v1.5c0 .69-.56 1.25-1.25 1.25h-6.5c-.69 0-1.25-.56-1.25-1.25v-1.5Z"
-					/>
-				</svg>
-			</span>
-		{:else if isTerminalDownload}
-			{@const filePath = token.href.slice(TERMINAL_DOWNLOAD_SCHEME.length)}
-			<!-- svelte-ignore a11y-click-events-have-key-events -->
-			<!-- svelte-ignore a11y-no-static-element-interactions -->
-			<span
-				class="inline-flex items-center gap-0.5 cursor-pointer text-blue-500 dark:text-blue-400 hover:underline"
-				title={filePath}
-				on:click={() =>
-					downloadTerminalFile(filePath).then((ok) => {
 						if (!ok) toast.error($i18n.t('Failed to download file'));
 					})}
 			>
@@ -211,6 +148,8 @@
 		<br />
 	{:else if token.type === 'del'}
 		<del><svelte:self id={`${id}-del`} tokens={token.tokens} {onSourceClick} /></del>
+	{:else if token.type === 'underline'}
+		<u><svelte:self id={`${id}-underline`} tokens={token.tokens} {onSourceClick} /></u>
 	{:else if token.type === 'inlineKatex'}
 		{#if token.text}
 			<KatexRenderer content={token.text} displayMode={token?.displayMode ?? false} />

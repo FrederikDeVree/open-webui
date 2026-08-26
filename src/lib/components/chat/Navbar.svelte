@@ -7,26 +7,21 @@
 		banners,
 		chatId,
 		config,
-		controlsActiveTab,
 		mobile,
 		settings,
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
-		selectedTerminalId,
-		terminalServers,
 		user
 	} from '$lib/stores';
 
 	import { slide } from 'svelte/transition';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 	import ShareChatModal from '../chat/ShareChatModal.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 	import Menu from '$lib/components/layout/Navbar/Menu.svelte';
-	import UserMenu from '$lib/components/layout/Sidebar/UserMenu.svelte';
 	import AdjustmentsHorizontal from '../icons/AdjustmentsHorizontal.svelte';
 
 	import PencilSquare from '../icons/PencilSquare.svelte';
@@ -57,14 +52,6 @@
 	export let archiveChatHandler: (id: string) => void;
 	export let deleteChatHandler: (id: string) => void;
 	export let moveChatHandler: (id: string, folderId: string) => void;
-	export let codeInterpreterEnabled: boolean = false;
-
-	$: showFilesButton =
-		($selectedTerminalId &&
-			(($terminalServers ?? []).some((t: any) => t.id && t.id === $selectedTerminalId) ||
-				$user?.role === 'admin' ||
-				($user?.permissions?.features?.direct_tool_servers ?? true))) ||
-		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
 
 	let closedBannerIds = [];
 
@@ -131,7 +118,7 @@
 					{#if chat?.id}
 						<div class="flex max-w-full min-w-0 items-center gap-2 mr-2">
 							<div
-								class="min-w-0 truncate py-1 text-left text-[15px] font-normal text-gray-700 dark:text-gray-300"
+								class="min-w-0 truncate py-1 text-left text-[0.9375rem] font-normal text-gray-700 dark:text-gray-300"
 							>
 								{title || chat?.chat?.title || $i18n.t('New Chat')}
 							</div>
@@ -166,7 +153,7 @@
 					{:else}
 						<div class="pointer-events-none invisible flex max-w-full min-w-0 items-center gap-2">
 							<div
-								class="min-w-0 truncate py-1 text-left text-[15px] font-normal text-gray-700 dark:text-gray-300"
+								class="min-w-0 truncate py-1 text-left text-[0.9375rem] font-normal text-gray-700 dark:text-gray-300"
 							>
 								{$i18n.t('New Chat')}
 							</div>
@@ -174,8 +161,8 @@
 					{/if}
 				</div>
 
-				<div class="mr-1 flex flex-none items-center gap-2 self-center">
-					<!-- <div class="md:hidden flex self-center w-[1px] h-5 mx-2 bg-gray-300 dark:bg-stone-700" /> -->
+				<div class="lg:mr-1 flex flex-none items-center gap-2 self-center">
+					<!-- <div class="md:hidden flex self-center w-[0.0625rem] h-5 mx-2 bg-gray-300 dark:bg-stone-700" /> -->
 
 					{#if $user?.role === 'user' ? ($user?.permissions?.chat?.temporary ?? true) && !($user?.permissions?.chat?.temporary_enforced ?? false) : true}
 						{#if !chat?.id}
@@ -243,70 +230,18 @@
 						</Tooltip>
 					{/if}
 
-				{#if showFilesButton}
-					<button
-						class="flex cursor-pointer px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {$showControls && $controlsActiveTab === 'files'
-							? 'bg-gray-100 dark:bg-gray-800 font-medium text-gray-900 dark:text-white'
-							: 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}"
-						on:click={async () => {
-							if ($showControls && $controlsActiveTab === 'files') {
-								showControls.set(false);
-							} else {
-								controlsActiveTab.set('files');
-								showControls.set(true);
-							}
-						}}
-						aria-label="Files"
-					>
-						{$i18n.t('Files')}
-					</button>
-				{/if}
-
-				{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
-					<Tooltip content={$i18n.t('Controls')}>
-						<button
-							class="flex size-6 cursor-pointer items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
-							on:click={async () => {
-								if ($showControls && $controlsActiveTab === 'controls') {
-									await showControls.set(false);
-								} else {
-									controlsActiveTab.set('controls');
-									await showControls.set(true);
-								}
-							}}
-							aria-label="Controls"
-						>
-							<Knobs className="size-5" strokeWidth="1" />
-						</button>
-					</Tooltip>
-				{/if}
-
-					{#if $user !== undefined && $user !== null}
-						<UserMenu
-							className="w-[240px]"
-							role={$user?.role}
-							help={true}
-							on:show={(e) => {
-								if (e.detail === 'archived-chat') {
-									showArchivedChats.set(true);
-								}
-							}}
-						>
+					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
+						<Tooltip content={$i18n.t('Controls')}>
 							<button
-								type="button"
-								class="select-none flex rounded-xl p-1.5 w-full hover:bg-gray-50 dark:hover:bg-gray-850 transition"
-								aria-label={$i18n.t('User menu')}
+								class="flex size-6 cursor-pointer items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
+								on:click={async () => {
+									await showControls.set(!$showControls);
+								}}
+								aria-label="Controls"
 							>
-								<div class=" self-center">
-									<img
-										src={`${WEBUI_API_BASE_URL}/users/${$user?.id}/profile/image`}
-										class="size-6 object-cover rounded-full"
-										alt=""
-										draggable="false"
-									/>
-								</div>
+								<Knobs className="size-5" strokeWidth="1" />
 							</button>
-						</UserMenu>
+						</Tooltip>
 					{/if}
 				</div>
 			</div>

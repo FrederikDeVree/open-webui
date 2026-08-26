@@ -2,7 +2,6 @@
 	import Fuse from 'fuse.js';
 	import { toast } from 'svelte-sonner';
 	import { v4 as uuidv4 } from 'uuid';
-	import { PaneGroup, Pane, PaneResizer } from 'paneforge';
 
 	import { onMount, getContext, onDestroy, tick } from 'svelte';
 	import type { Writable } from 'svelte/store';
@@ -46,9 +45,10 @@
 		syncKnowledgeCleanup,
 		testExternalKnowledgeRetrieval
 	} from '$lib/apis/knowledge';
-	import { processWeb, processYoutubeVideo } from '$lib/apis/retrieval';
+	import { processUrl } from '$lib/apis/retrieval';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
-	import { blobToFile, isYoutubeUrl, copyToClipboard } from '$lib/utils';
+	import { blobToFile, copyToClipboard } from '$lib/utils';
 	import { computeFileHash } from '$lib/utils/hash';
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
@@ -78,11 +78,6 @@
 	import Pagination from '$lib/components/common/Pagination.svelte';
 	import AttachWebpageModal from '$lib/components/chat/MessageInput/AttachWebpageModal.svelte';
 
-	let largeScreen = true;
-
-	let pane;
-	let showSidepanel = true;
-
 	let showAddWebpageModal = false;
 	let showAddTextContentModal = false;
 	let showNewDirectoryModal = false;
@@ -93,7 +88,6 @@
 	let showAccessControlModal = false;
 	let showResetConfirm = false;
 
-	let minSize = 0;
 	type DirectoryFileEntry = { path: string; filename: string; file: File };
 	type DirectoryManifestEntry = DirectoryFileEntry & { checksum: string; size: number };
 
@@ -308,6 +302,11 @@
 	};
 
 	const uploadWeb = async (urls) => {
+		if (!knowledge) {
+			toast.error($i18n.t('Knowledge base not found.'));
+			return;
+		}
+
 		if (!Array.isArray(urls)) {
 			urls = [urls];
 		}
@@ -330,29 +329,47 @@
 		for (const fileItem of newFileItems) {
 			try {
 				console.log(fileItem);
-				const res = await processWeb(localStorage.token, '', fileItem.url, false).catch((e) => {
-					console.error('Error processing web URL:', e);
+				const res = await processUrl(localStorage.token, fileItem.url).catch((e) => {
+					console.error('Error processing URL:', e);
 					return null;
 				});
 
 				if (res) {
 					console.log(res);
-					const file = createFileFromText(
-						// Use URL as filename, sanitized
-						fileItem.url
-							.replace(/[^a-z0-9]/gi, '_')
-							.toLowerCase()
-							.slice(0, 50),
-						res.content
-					);
+					let uploadedFile = res.file;
 
-					const uploadedFile = await uploadFile(localStorage.token, file, {
-						knowledge_id: knowledge.id,
-						directory_id: currentDirectoryId
-					}).catch((e) => {
-						toast.error(`${e}`);
-						return null;
-					});
+					if (res.type === 'web' || res.type === 'youtube') {
+						const file = createFileFromText(
+							// Use URL as filename, sanitized
+							fileItem.url
+								.replace(/[^a-z0-9]/gi, '_')
+								.toLowerCase()
+								.slice(0, 50),
+							res.content ?? ''
+						);
+
+						uploadedFile = await uploadFile(localStorage.token, file, {
+							knowledge_id: knowledge.id,
+							directory_id: currentDirectoryId,
+							source_url: fileItem.url
+						}).catch((e) => {
+							toast.error(`${e}`);
+							return null;
+						});
+					} else if (uploadedFile?.id) {
+						const linkedKnowledge = await addFileToKnowledgeById(
+							localStorage.token,
+							knowledge.id,
+							uploadedFile.id,
+							currentDirectoryId
+						).catch((e) => {
+							toast.error(`${e}`);
+							return null;
+						});
+						if (!linkedKnowledge) {
+							uploadedFile = null;
+						}
+					}
 
 					if (uploadedFile) {
 						console.log(uploadedFile);
@@ -894,8 +911,11 @@
 		}
 	};
 
+	const openFileHandler = (fileId: string) => {
+		window.open(`${WEBUI_API_BASE_URL}/files/${encodeURIComponent(fileId)}/content`, '_blank');
+	};
+
 	let debounceTimeout = null;
-	let mediaQuery;
 
 	let dragged = false;
 	let isSaving = false;
@@ -955,8 +975,8 @@
 				...knowledge,
 				name: knowledge.name,
 				description: knowledge.description,
-				access_grants: knowledge.access_grants ?? [],
-				context: knowledge.meta?.context ?? ''
+					access_grants: knowledge.access_grants ?? [],
+					context: knowledge.meta?.context ?? ''
 			}).catch((e) => {
 				toast.error(`${e}`);
 			});
@@ -965,14 +985,6 @@
 				toast.success($i18n.t('Knowledge updated successfully'));
 			}
 		}, 1000);
-	};
-
-	const handleMediaQuery = async (e) => {
-		if (e.matches) {
-			largeScreen = true;
-		} else {
-			largeScreen = false;
-		}
 	};
 
 	const readDirectoryEntries = async (reader: any) => {
@@ -1083,42 +1095,6 @@
 	};
 
 	onMount(async () => {
-		// listen to resize 1024px
-		mediaQuery = window.matchMedia('(min-width: 1024px)');
-
-		mediaQuery.addEventListener('change', handleMediaQuery);
-		handleMediaQuery(mediaQuery);
-
-		// Select the container element you want to observe
-		const container = document.getElementById('collection-container');
-
-		// initialize the minSize based on the container width
-		minSize = !largeScreen ? 100 : Math.floor((300 / container.clientWidth) * 100);
-
-		// Create a new ResizeObserver instance
-		const resizeObserver = new ResizeObserver((entries) => {
-			for (let entry of entries) {
-				const width = entry.contentRect.width;
-				// calculate the percentage of 300
-				const percentage = (300 / width) * 100;
-				// set the minSize to the percentage, must be an integer
-				minSize = !largeScreen ? 100 : Math.floor(percentage);
-
-				if (showSidepanel) {
-					if (pane && pane.isExpanded() && pane.getSize() < minSize) {
-						pane.resize(minSize);
-					}
-				}
-			}
-		});
-
-		// Start observing the container's size changes
-		resizeObserver.observe(container);
-
-		if (pane) {
-			pane.expand();
-		}
-
 		id = $page.params.id;
 		const res = await getKnowledgeById(localStorage.token, id).catch((e) => {
 			toast.error(`${e}`);
@@ -1147,7 +1123,6 @@
 			clearInterval(pendingPollTimer);
 			pendingPollTimer = null;
 		}
-		mediaQuery?.removeEventListener('change', handleMediaQuery);
 		const dropZone = document.querySelector('body');
 		dropZone?.removeEventListener('dragover', onDragOver);
 		dropZone?.removeEventListener('drop', onDrop);
@@ -1455,18 +1430,20 @@
 							</button>
 
 							<div slot="content">
-								<DropdownMenu className="min-w-[180px]">
+								<DropdownMenu className="min-w-[11.25rem]">
 									<button
-										class="select-none flex h-[1.6875rem] w-full cursor-pointer items-center gap-2 rounded-xl bg-transparent px-2 text-[13px] hover:text-gray-900 dark:hover:text-gray-100"
+										class="select-none flex h-[1.6875rem] w-full cursor-pointer items-center gap-2 rounded-xl bg-transparent px-2 text-[0.8125rem] hover:text-gray-900 dark:hover:text-gray-100"
 										type="button"
 										on:click={() => {
 											includeContent = !includeContent;
+											currentPage = 1;
 										}}
 									>
 										<Checkbox
 											state={includeContent ? 'checked' : 'unchecked'}
 											on:change={(e) => {
 												includeContent = e.detail === 'checked';
+												currentPage = 1;
 											}}
 										/>
 										{$i18n.t('File content')}
@@ -1534,6 +1511,7 @@
 									} else {
 										delete localStorage.workspaceViewOption;
 									}
+									currentPage = 1;
 								}}
 							/>
 
@@ -1677,8 +1655,18 @@
 													<ChevronLeft strokeWidth="2.5" />
 												</button>
 											</div>
-											<div class=" flex-1 text-sm line-clamp-1">
-												{selectedFile?.meta?.name}
+											<div class="flex-1 text-sm line-clamp-1">
+												<a
+													href="#"
+													class="hover:underline line-clamp-1"
+													on:click|preventDefault={() => {
+														if (selectedFile?.id) {
+															openFileHandler(selectedFile.id);
+														}
+													}}
+												>
+													{selectedFile?.meta?.name}
+												</a>
 											</div>
 
 											{#if knowledge?.write_access}

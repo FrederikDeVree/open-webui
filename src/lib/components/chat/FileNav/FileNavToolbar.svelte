@@ -1,19 +1,17 @@
 <script lang="ts">
 	import { getContext, afterUpdate } from 'svelte';
-	import { tick } from 'svelte';
-	import Folder from '../../icons/Folder.svelte';
-	import NewFolderAlt from '../../icons/NewFolderAlt.svelte';
-	import FilePlusAlt from '../../icons/FilePlusAlt.svelte';
 	import Spinner from '../../common/Spinner.svelte';
 	import Tooltip from '../../common/Tooltip.svelte';
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
 	import DropdownMenu from '$lib/components/common/DropdownMenu.svelte';
+	import Icon from './Icon.svelte';
 
-	const i18n = getContext('i18n');
+	const i18n: any = getContext('i18n');
 
 	export let breadcrumbs: { label: string; path: string }[] = [];
 	export let selectedFile: string | null = null;
 	export let loading = false;
+	export let writable = true;
 
 	export let onNavigate: (path: string) => void = () => {};
 	export let onRefresh: () => void = () => {};
@@ -21,12 +19,14 @@
 	export let onNewFile: () => void = () => {};
 	export let onUploadFiles: (files: File[]) => void = () => {};
 	export let onDownloadDir: () => void = () => {};
-	export let onMove: (source: string, destFolder: string) => void = () => {};
+	export let onMove: (sources: string[], destFolder: string) => void | Promise<void> = () => {};
+	export let showHidden = false;
+	export let onToggleHidden: () => void = () => {};
 
 	// Sort controls
-	export let sortBy: 'name' | 'date' = 'name';
+	export let sortBy: 'name' | 'size' | 'date' = 'name';
 	export let sortAsc: boolean = true;
-	export let onSort: (mode: 'name' | 'date') => void = () => {};
+	export let onSort: (mode: 'name' | 'size' | 'date') => void = () => {};
 
 	// Back / forward navigation
 	export let canGoBack = false;
@@ -34,17 +34,15 @@
 	export let onGoBack: () => void = () => {};
 	export let onGoForward: () => void = () => {};
 
-	// Selection mode
-	export let selectionMode: boolean = false;
-	export let selectedCount: number = 0;
-	export let onToggleSelection: () => void = () => {};
-	export let onDeleteSelected: () => void = () => {};
-
 	let dragOverCrumb: number | null = null;
+	let sortMenuOpen = false;
+	let actionsMenuOpen = false;
 
 	let uploadInput: HTMLInputElement;
-	let uploadDirInput: HTMLInputElement;
 	let breadcrumbEl: HTMLDivElement;
+
+	const showSeparator = (index: number) =>
+		index > 0 && (breadcrumbs[0]?.label !== '/' || index > 1);
 
 	// Scroll breadcrumb to the end after every DOM update
 	afterUpdate(() => {
@@ -52,67 +50,49 @@
 	});
 </script>
 
-<div class="flex items-center px-2 pb-1.5 shrink-0 gap-1">
-	<!-- Back -->
-	<Tooltip content={$i18n.t('Back')}>
-		<button
-			class="shrink-0 p-1 rounded transition {canGoBack
-				? 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200'
-				: 'text-gray-300 dark:text-gray-600 cursor-default'}"
-			on:click={onGoBack}
-			disabled={!canGoBack}
-			aria-label={$i18n.t('Back')}
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 20 20"
-				fill="currentColor"
-				class="size-3.5"
+<div
+	class="m-0 flex items-center gap-1 px-1 pt-0 pb-1.5 shrink-0 border-b border-gray-50 dark:border-gray-850/30"
+>
+	<div class="flex shrink-0 items-center gap-0.5 px-1">
+		<!-- Back -->
+		<Tooltip content={$i18n.t('Back')}>
+			<button
+				class="shrink-0 flex h-5 min-w-6 items-center justify-center rounded px-1.5 transition-colors duration-100 {canGoBack
+					? 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+					: 'text-gray-200 dark:text-gray-700 cursor-default'}"
+				on:click={onGoBack}
+				disabled={!canGoBack}
+				aria-label={$i18n.t('Back')}
 			>
-				<path
-					fill-rule="evenodd"
-					d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z"
-					clip-rule="evenodd"
-				/>
-			</svg>
-		</button>
-	</Tooltip>
+				<Icon name="chevron-left" size={11} strokeWidth={1.5} />
+			</button>
+		</Tooltip>
 
-	<!-- Forward -->
-	<Tooltip content={$i18n.t('Forward')}>
-		<button
-			class="shrink-0 p-1 rounded transition {canGoForward
-				? 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-200'
-				: 'text-gray-300 dark:text-gray-600 cursor-default'}"
-			on:click={onGoForward}
-			disabled={!canGoForward}
-			aria-label={$i18n.t('Forward')}
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 20 20"
-				fill="currentColor"
-				class="size-3.5"
+		<!-- Forward -->
+		<Tooltip content={$i18n.t('Forward')}>
+			<button
+				class="shrink-0 flex h-5 min-w-6 items-center justify-center rounded px-1.5 transition-colors duration-100 {canGoForward
+					? 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+					: 'text-gray-200 dark:text-gray-700 cursor-default'}"
+				on:click={onGoForward}
+				disabled={!canGoForward}
+				aria-label={$i18n.t('Forward')}
 			>
-				<path
-					fill-rule="evenodd"
-					d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z"
-					clip-rule="evenodd"
-				/>
-			</svg>
-		</button>
-	</Tooltip>
+				<Icon name="chevron-right" size={11} strokeWidth={1.5} />
+			</button>
+		</Tooltip>
+	</div>
 
 	<div
 		bind:this={breadcrumbEl}
-		class="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-none"
+		class="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto scrollbar-none"
 	>
 		{#each breadcrumbs as crumb, i}
-			{#if i > 1}
-				<span class="text-gray-300 dark:text-gray-600 text-xs shrink-0 select-none mx-0.5">/</span>
+			{#if showSeparator(i)}
+				<span class="text-gray-300 dark:text-gray-600 text-xs shrink-0 select-none">/</span>
 			{/if}
 			<button
-				class="text-xs shrink-0 px-1 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition
+				class="text-xs shrink-0 p-0 transition
 					{!selectedFile && i === breadcrumbs.length - 1
 					? 'text-gray-700 dark:text-gray-300'
 					: 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'}
@@ -121,6 +101,7 @@
 					: ''}"
 				on:click={() => onNavigate(crumb.path)}
 				on:dragover={(e) => {
+					if (!writable) return;
 					if (!e.dataTransfer?.types.includes('application/x-terminal-file-move')) return;
 					e.preventDefault();
 					e.stopPropagation();
@@ -129,7 +110,8 @@
 				on:dragleave={() => {
 					if (dragOverCrumb === i) dragOverCrumb = null;
 				}}
-				on:drop={(e) => {
+				on:drop={async (e) => {
+					if (!writable) return;
 					const raw = e.dataTransfer?.getData('application/x-terminal-file-move');
 					if (!raw) return;
 					e.preventDefault();
@@ -137,8 +119,8 @@
 					dragOverCrumb = null;
 					try {
 						const data = JSON.parse(raw);
-						const paths = data.paths || (data.path ? [data.path] : []);
-						for (const p of paths) onMove(p, crumb.path);
+						const paths = (data.paths || (data.path ? [data.path] : [])) as string[];
+						await onMove(paths, crumb.path);
 					} catch {}
 				}}
 			>
@@ -146,236 +128,173 @@
 			</button>
 		{/each}
 		{#if selectedFile}
-			<span class="text-gray-300 dark:text-gray-600 text-xs shrink-0 select-none mx-0.5">/</span>
-			<span class="text-xs shrink-0 px-1.5 py-0.5 text-gray-700 dark:text-gray-300">
+			<span class="text-gray-300 dark:text-gray-600 text-xs shrink-0 select-none">/</span>
+			<span class="text-xs shrink-0 p-0 text-gray-700 dark:text-gray-300">
 				{selectedFile.split('/').pop()}
 			</span>
 		{/if}
 	</div>
+	{#if !writable}
+		<span class="text-[0.625rem] text-gray-400 dark:text-gray-500 shrink-0"> Read-only </span>
+	{/if}
 
 	<Tooltip content={$i18n.t('Refresh')}>
 		<button
-			class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+			class="shrink-0 flex h-5 w-5 items-center justify-center rounded transition-colors duration-100 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
 			on:click={onRefresh}
 			aria-label={$i18n.t('Refresh')}
 		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				viewBox="0 0 20 20"
-				fill="currentColor"
-				class="size-3.5 {loading ? 'animate-spin' : ''}"
-			>
-				<path
-					fill-rule="evenodd"
-					d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.451a.75.75 0 0 0 0-1.5H4.5a.75.75 0 0 0-.75.75v3.75a.75.75 0 0 0 1.5 0v-2.127l.13.13a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm-10.624-2.85a5.5 5.5 0 0 1 9.201-2.465l.312.31H11.75a.75.75 0 0 0 0 1.5h3.75a.75.75 0 0 0 .75-.75V3.42a.75.75 0 0 0-1.5 0v2.126l-.13-.129A7 7 0 0 0 3.239 8.555a.75.75 0 0 0 1.449.39Z"
-					clip-rule="evenodd"
-				/>
-			</svg>
+			<Icon name="refresh" size={11} strokeWidth={1.4} class={loading ? 'animate-spin' : ''} />
 		</button>
 	</Tooltip>
 
 	{#if !selectedFile}
-		<!-- Select toggle -->
-		<Tooltip content={selectionMode ? $i18n.t('Cancel selection') : $i18n.t('Select')}>
-			<button
-				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition
-					{selectionMode
-					? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
-					: 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}"
-				on:click={onToggleSelection}
-				aria-label={selectionMode ? $i18n.t('Cancel selection') : $i18n.t('Select')}
-				aria-pressed={selectionMode}
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 20 20"
-					fill="currentColor"
-					class="size-3.5"
-				>
-					<path
-						fill-rule="evenodd"
-						d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
-						clip-rule="evenodd"
-					/>
-				</svg>
-			</button>
-		</Tooltip>
-
-		<!-- Delete selected (visible when items are selected) -->
-		{#if selectedCount > 0}
-			<Tooltip content={$i18n.t('Delete selected ({{count}})', { count: selectedCount })}>
-				<button
-					class="shrink-0 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-					on:click={onDeleteSelected}
-					aria-label={$i18n.t('Delete selected')}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 20 20"
-						fill="currentColor"
-						class="size-3.5"
-					>
-						<path
-							fill-rule="evenodd"
-							d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z"
-							clip-rule="evenodd"
-						/>
-					</svg>
-				</button>
-			</Tooltip>
-		{/if}
-
-		<Dropdown align="end" sideOffset={4}>
+		<Dropdown bind:show={sortMenuOpen} align="end" sideOffset={4}>
 			<Tooltip content={$i18n.t('Sort')}>
 				<button
-					class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+					class="shrink-0 flex h-5 w-5 items-center justify-center rounded transition-colors duration-100 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
 					aria-label={$i18n.t('Sort')}
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 20 20"
-						fill="currentColor"
-						class="size-3.5"
-					>
-						<path
-							d="M2 3.75A.75.75 0 0 1 2.75 3h11.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 3.75ZM2 7.5a.75.75 0 0 1 .75-.75h7.508a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.5ZM14 7a.75.75 0 0 1 .75.75v6.69l1.72-1.72a.75.75 0 1 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06l1.72 1.72V7.75A.75.75 0 0 1 14 7ZM2 11.25a.75.75 0 0 1 .75-.75h4.562a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"
-						/>
-					</svg>
+					<Icon name="sort" size={11} strokeWidth={1.4} />
 				</button>
 			</Tooltip>
 
 			<div slot="content">
-				<DropdownMenu className="min-w-[150px] z-[9999999]">
+				<DropdownMenu className="min-w-[9.375rem] z-[9999999]">
 					<button
 						type="button"
-						class="select-none flex h-[1.6875rem] w-full items-center gap-2 rounded-xl px-2 text-[13px] hover:bg-gray-50/40 dark:hover:bg-gray-800/40 transition"
-						on:click={() => onSort('name')}
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition"
+						on:click={() => {
+							onSort('name');
+							sortMenuOpen = false;
+						}}
 					>
 						<span class="flex-1 text-left">{$i18n.t('Name')}</span>
 						{#if sortBy === 'name'}
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 16 16"
-								fill="currentColor"
-								class="size-3 text-gray-500 dark:text-gray-400 transition-transform {sortAsc
+							<Icon
+								name="chevron-up"
+								size={12}
+								strokeWidth={1.5}
+								class="text-gray-500 dark:text-gray-400 transition-transform {sortAsc
 									? ''
 									: 'rotate-180'}"
-							>
-								<path
-									fill-rule="evenodd"
-									d="M11.78 9.78a.75.75 0 0 1-1.06 0L8 7.06 5.28 9.78a.75.75 0 0 1-1.06-1.06l3.25-3.25a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06Z"
-									clip-rule="evenodd"
-								/>
-							</svg>
+							/>
 						{/if}
 					</button>
 					<button
 						type="button"
-						class="select-none flex h-[1.6875rem] w-full items-center gap-2 rounded-xl px-2 text-[13px] hover:bg-gray-50/40 dark:hover:bg-gray-800/40 transition"
-						on:click={() => onSort('date')}
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition"
+						on:click={() => {
+							onSort('size');
+							sortMenuOpen = false;
+						}}
+					>
+						<span class="flex-1 text-left">{$i18n.t('Size')}</span>
+						{#if sortBy === 'size'}
+							<Icon
+								name="chevron-up"
+								size={12}
+								strokeWidth={1.5}
+								class="text-gray-500 dark:text-gray-400 transition-transform {sortAsc
+									? ''
+									: 'rotate-180'}"
+							/>
+						{/if}
+					</button>
+					<button
+						type="button"
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition"
+						on:click={() => {
+							onSort('date');
+							sortMenuOpen = false;
+						}}
 					>
 						<span class="flex-1 text-left">{$i18n.t('Date Modified')}</span>
 						{#if sortBy === 'date'}
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 16 16"
-								fill="currentColor"
-								class="size-3 text-gray-500 dark:text-gray-400 transition-transform {sortAsc
+							<Icon
+								name="chevron-up"
+								size={12}
+								strokeWidth={1.5}
+								class="text-gray-500 dark:text-gray-400 transition-transform {sortAsc
 									? ''
 									: 'rotate-180'}"
-							>
-								<path
-									fill-rule="evenodd"
-									d="M11.78 9.78a.75.75 0 0 1-1.06 0L8 7.06 5.28 9.78a.75.75 0 0 1-1.06-1.06l3.25-3.25a.75.75 0 0 1 1.06 0l3.25 3.25a.75.75 0 0 1 0 1.06Z"
-									clip-rule="evenodd"
-								/>
-							</svg>
+							/>
 						{/if}
 					</button>
 				</DropdownMenu>
 			</div>
 		</Dropdown>
-		<Tooltip content={$i18n.t('New Folder')}>
-			<button
-				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-				on:click={onNewFolder}
-				aria-label={$i18n.t('New Folder')}
-			>
-				<NewFolderAlt className="size-3.5" />
-			</button>
-		</Tooltip>
-		<Tooltip content={$i18n.t('New File')}>
-			<button
-				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-				on:click={onNewFile}
-				aria-label={$i18n.t('New File')}
-			>
-				<FilePlusAlt className="size-3.5" />
-			</button>
-		</Tooltip>
-		<Tooltip content={$i18n.t('Download')}>
-			<button
-				class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-				on:click={onDownloadDir}
-				aria-label={$i18n.t('Download')}
-			>
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 20 20"
-					fill="currentColor"
-					class="size-3.5"
-				>
-					<path
-						d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"
-					/>
-					<path
-						d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"
-					/>
-				</svg>
-			</button>
-		</Tooltip>
-		<Dropdown align="end" sideOffset={4}>
-			<Tooltip content={$i18n.t('Upload')}>
+		<Dropdown bind:show={actionsMenuOpen} align="end" sideOffset={4}>
+			<Tooltip content={$i18n.t('Actions')}>
 				<button
-					class="shrink-0 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-					aria-label={$i18n.t('Upload')}
+					class="shrink-0 flex h-5 w-5 items-center justify-center rounded transition-colors duration-100 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+					aria-label={$i18n.t('Actions')}
 				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.5"
-						class="size-3.5"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
-						/>
-					</svg>
+					<Icon name="three-dots" size={11} strokeWidth={1.4} />
 				</button>
 			</Tooltip>
 
 			<div slot="content">
-				<div
-					class="min-w-[150px] rounded-2xl p-1 z-[9999999] bg-white dark:bg-gray-850 dark:text-white shadow-lg border border-gray-100 dark:border-gray-800"
-				>
+				<DropdownMenu className="min-w-[9.375rem] z-[9999999]">
 					<button
 						type="button"
-						class="select-none flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition items-center gap-2 text-sm"
-						on:click={() => uploadInput?.click()}
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition disabled:opacity-40 disabled:hover:bg-transparent"
+						on:click={() => {
+							onNewFolder();
+							actionsMenuOpen = false;
+						}}
+						disabled={!writable}
 					>
-						{$i18n.t('Upload Files')}
+						<Icon name="folder" size={12} strokeWidth={1.4} />
+						<span>{$i18n.t('New Folder')}</span>
 					</button>
 					<button
 						type="button"
-						class="select-none flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition items-center gap-2 text-sm"
-						on:click={() => uploadDirInput?.click()}
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition disabled:opacity-40 disabled:hover:bg-transparent"
+						on:click={() => {
+							onNewFile();
+							actionsMenuOpen = false;
+						}}
+						disabled={!writable}
 					>
-						{$i18n.t('Upload Folder')}
+						<Icon name="empty-page" size={12} strokeWidth={1.4} />
+						<span>{$i18n.t('New File')}</span>
 					</button>
-				</div>
+					<button
+						type="button"
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition disabled:opacity-40 disabled:hover:bg-transparent"
+						on:click={() => {
+							actionsMenuOpen = false;
+							uploadInput?.click();
+						}}
+						disabled={!writable}
+					>
+						<Icon name="upload" size={12} strokeWidth={1.4} />
+						<span>{$i18n.t('Upload')}</span>
+					</button>
+					<button
+						type="button"
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition"
+						on:click={() => {
+							onDownloadDir();
+							actionsMenuOpen = false;
+						}}
+					>
+						<Icon name="download" size={12} strokeWidth={1.4} />
+						<span>{$i18n.t('Download')}</span>
+					</button>
+					<button
+						type="button"
+						class="select-none flex h-7 w-full items-center gap-2 rounded-lg px-2 text-xs hover:bg-gray-50/40 dark:hover:bg-white/4 transition"
+						on:click={() => {
+							onToggleHidden();
+							actionsMenuOpen = false;
+						}}
+					>
+						<Icon name="eye" size={12} strokeWidth={1.4} />
+						<span>{showHidden ? $i18n.t('Hide Hidden Files') : $i18n.t('Show Hidden Files')}</span>
+					</button>
+				</DropdownMenu>
 			</div>
 		</Dropdown>
 		<input
@@ -384,21 +303,9 @@
 			multiple
 			hidden
 			on:change={async () => {
-				if (!uploadInput?.files?.length) return;
+				if (!writable || !uploadInput?.files?.length) return;
 				onUploadFiles(Array.from(uploadInput.files));
 				uploadInput.value = '';
-			}}
-		/>
-		<input
-			bind:this={uploadDirInput}
-			type="file"
-			webkitdirectory
-			multiple
-			hidden
-			on:change={async () => {
-				if (!uploadDirInput?.files?.length) return;
-				onUploadFiles(Array.from(uploadDirInput.files));
-				uploadDirInput.value = '';
 			}}
 		/>
 	{:else}
