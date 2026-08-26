@@ -168,7 +168,8 @@ open-webui/
 
 ## LOCAL (dev-arvoo) CUSTOM CHANGES
 
-This branch (`dev-arvoo`, based on upstream 0.11.0) carries the following local changes on top of upstream.
+This branch (`dev-arvoo-v0.11.1`, merged with upstream/dev at v0.11.1, merge commit `db877818c`) carries the
+following local changes on top of upstream.
 Identify them by author `frederik@arvoo.com`. The big bundle is the consolidation commit `d2a8e93bc`
 ("dev-arvoo: consolidate changes on clean origin/dev base"); the rest are individual feature/fix commits.
 When merging upstream, preserve these unless explicitly superseded (see status notes).
@@ -187,7 +188,9 @@ Let the user browse/download files from connected terminal servers, and make mod
 - **Status:** the "clickable markdown path" part (`terminal-download://` + `TERMINAL_PATH_RE` + `downloadTerminalFile`
 	+ the two Markdown token files) is **superseded by upstream's `display_file` tool** (upstream 0.11.1: `TerminalOutputFile.svelte`,
 	`terminalFileDisplay` setting, `terminal:display_file` socket event). Decision: **drop the clickable-path part, keep upstream's
-	`display_file`**. The `FileNav` `homePath`/`clampToHome` clamping and the terminal proxy utils remain local and should be kept.
+	`display_file`**. **Done in the v0.11.1 merge**: the clickable-path code was removed from `MarkdownInlineTokens.svelte`
+	(only the pyodide scheme remains there). `src/lib/utils/terminal.ts` is now **orphaned — safe to delete**. The `FileNav`
+	`homePath`/`clampToHome` clamping and the terminal proxy utils remain local and should be kept.
 
 ### 2. Send message while attachments upload (user feature — SUPERSEDED)
 Block-and-wait: while non-image files are still `uploading`, the send handler polls until they finish.
@@ -196,7 +199,8 @@ Block-and-wait: while non-image files are still `uploading`, the send handler po
 - `src/lib/components/chat/MessageInput.svelte` — `export let uploadPending = false;`; send button disabled + spinner +
 	"Waiting for upload..." tooltip while `uploadPending`.
 - **Status:** **superseded by upstream's queue** (`chatRequestQueues` store, `processNextInQueue`, `QueuedMessageItem.svelte`,
-	`messageQueue` prop). Decision: **drop this, use upstream's queue.**
+	`messageQueue` prop). Decision: **drop this, use upstream's queue.** **Done in the v0.11.1 merge**: `Chat.svelte` is the
+	upstream version (queue-based `uploadPending`, no `awaitingUpload` polling).
 
 ### 3. Mermaid / Vega diagram rendering (user feature)
 Client-side diagram rendering with SVG→PNG rasterization for LLM visual feedback and self-correction.
@@ -243,6 +247,7 @@ Global config to default file attachments to full-context mode.
 	renamed `query_knowledge_files` → `search_knowledge_files` + `list_knowledge_files`.
 - Default counts: `search_knowledge_files` count 50, default query count 10 (`backend/open_webui/tools/builtin.py`).
 - **Status:** upstream kept the old name. Preserve the local rename consistently across all references.
+- **Verified in the v0.11.1 merge**: zero `query_knowledge_files` references remain in `backend/` and `src/`.
 
 ### 9. Per-request embedding cache (user feature)
 - `backend/open_webui/retrieval/utils.py`, `backend/open_webui/routers/retrieval.py` — `request.state.embedding_cache`
@@ -257,9 +262,28 @@ Global config to default file attachments to full-context mode.
 - `AGENTS.md` — this knowledge base file.
 
 ### Merge notes (upstream/dev → 0.11.1)
+**Completed 2026-08-26** (merge commit `db877818c` on `dev-arvoo-v0.11.1`; 320 conflicts).
 - **Take upstream** for: `aiodns` (upstream pins 3.6.1; local had 4.0.4 — use upstream, opt-in via `AIOHTTP_CLIENT_ASYNC_DNS_RESOLVER`),
 	`utils/timers.py` (column-based `Chat.timer_at`, fixes #27663), the moved/refactored model-normalization + context-usage block in
 	`Chat.svelte` (upstream moved it; a new copy using `getUsageTokenCount` sits just below the old location), and all px→rem unit
 	conversions (upstream's "Interface scaling" work).
 - **Drop** local test deps `moto[s3]`, `docker`, `pytest`, `pytest-docker` from `pyproject.toml` `[all]` and `uv.lock`.
 - **Keep** local: items 1 (FileNav home-path + terminal proxy), 3, 4, 5, 6, 7, 8, 9, 10.
+
+### Merge mechanics (gotchas for the next upstream merge)
+- **`git checkout --theirs <many paths>` is atomic**: if even one path has no "theirs" stage (e.g. a delete/modify `UD` conflict),
+	the whole command fails and **nothing** is checked out. A subsequent `git add` then stages the working tree as-is — which may
+	still contain conflict markers, and `git diff --diff-filter=U` shows 0 (the index looks merged). To force a file to the
+	upstream blob regardless of stage state, use `git checkout MERGE_HEAD -- <file>` instead.
+- **Upstream is a superset in several places** — no re-apply needed: `(app)/+layout.svelte` terminal-server mapping (proxy URL +
+	session key for FileNav), `Chat.svelte` `displayFileHandler`/queue-based `uploadPending`, FileNav bulk selection +
+	folder upload + `$terminalServers === null` loading guards.
+- **Local-only files to preserve** (not in upstream, easy to lose): `src/lib/utils/pyodide.ts`, `src/lib/utils/terminal.ts`
+	(delete once item 1 is fully dropped), `AGENTS.md`, the two local Alembic migrations
+	(`4a1b2c3d4e5f_add_ldap_servers_config.py`, `merge_heads_4a1b2c_f0bd01.py`), `backend/tests/test_ldap_servers.py`,
+	`docker-compose.arvoo.yaml` / `docker-compose.dev-arvoo.yaml`, `backup-postgres.sh` / `restore-postgres.sh`.
+- **Verify after a merge** (quick greps): `homePath` in `FileNav.svelte`; `LDAP_SERVERS` in `Authentication.svelte` +
+	`/admin/config/ldap/servers` in `auths.py`; `RAG_FILE_FULL_CONTEXT` in `config.py` + `Documents.svelte`; `kbFullContext` in
+	`KnowledgeBase.svelte`; `diagram_renderer` in `middleware.py` + `MarkdownTokens.svelte`; `linkifyPyodidePaths` in
+	`Markdown.svelte`; `toggleTerminal` in `TerminalMenu.svelte`; `search_knowledge_files` (and 0× `query_knowledge_files`)
+	in `tools/builtin.py`.
