@@ -31,6 +31,8 @@
 		shareUrl = `${window.location.origin}/s/${sharedChat.share_id}`;
 		console.log(shareUrl);
 		chat = await getChatById(localStorage.token, chatId);
+		await loadAccessGrants();
+		await applyDefaultVisibility();
 
 		return shareUrl;
 	};
@@ -96,19 +98,44 @@
 		return chat.id !== _chat.id || chat.share_id !== _chat.share_id;
 	};
 
-	$: if (show) {
-		(async () => {
-			if (chatId) {
-				const _chat = await getChatById(localStorage.token, chatId);
-				if (isDifferentChat(_chat)) {
-					chat = _chat;
+	// Kept out of the reactive statement below so re-assigning `chat`/`accessGrants` here
+	// doesn't re-trigger the `$:` block (it would otherwise loop forever).
+	const applyDefaultVisibility = async () => {
+		// Default to open visibility (anyone with the link) when chat is first shared (no existing grants)
+		if (chat?.share_id && accessGrants.length === 0) {
+			accessGrants = [
+				{
+					principal_type: 'anyone',
+					principal_id: '*',
+					permission: 'read'
 				}
-				await loadAccessGrants();
-			} else {
-				chat = null;
-				accessGrants = [];
-			}
-		})();
+			];
+			await saveAccessGrants();
+		}
+	};
+
+	const loadShareState = async () => {
+		if (!chatId) {
+			chat = null;
+			accessGrants = [];
+			return;
+		}
+
+		const _chat = await getChatById(localStorage.token, chatId);
+		if (isDifferentChat(_chat)) {
+			chat = _chat;
+		}
+		await loadAccessGrants();
+		await applyDefaultVisibility();
+	};
+
+	let loadedForChatId: string | null = null;
+	$: if (show && chatId !== loadedForChatId) {
+		loadedForChatId = chatId;
+		loadShareState();
+	}
+	$: if (!show) {
+		loadedForChatId = null;
 	}
 </script>
 

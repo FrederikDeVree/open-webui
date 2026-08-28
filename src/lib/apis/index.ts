@@ -1454,7 +1454,8 @@ export const getBackendConfig = async () => {
 		method: 'GET',
 		credentials: 'include',
 		headers: {
-			'Content-Type': 'application/json'
+			'Content-Type': 'application/json',
+			...(localStorage.token && { authorization: `Bearer ${localStorage.token}` })
 		}
 	})
 		.then(async (res) => {

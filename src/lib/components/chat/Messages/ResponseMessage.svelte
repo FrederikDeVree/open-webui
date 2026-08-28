@@ -1565,6 +1565,24 @@
 										{/if}
 									{/if}
 
+									{#if !$temporaryChatEnabled && ($config?.features.enable_message_rating ?? true) && ($user?.role === 'admin' || ($user?.permissions?.chat?.rate_response ?? true))}
+										<Tooltip content={$i18n.t('Feedback')} placement="bottom">
+											<button
+												aria-label={$i18n.t('Feedback')}
+												class="{isLastMessage || ($settings?.highContrastMode ?? false)
+													? 'visible'
+													: 'invisible group-hover:visible'} rounded-lg px-2 py-1.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/5 {showRateComment
+													? 'text-black dark:text-white bg-black/5 dark:bg-white/5'
+													: 'hover:text-black dark:hover:text-white'}"
+												on:click={() => {
+													showRateComment = !showRateComment;
+												}}
+											>
+												{$i18n.t('Feedback')}
+											</button>
+										</Tooltip>
+									{/if}
+
 									{#if message.timestamp}
 										<Tooltip
 											className="flex self-center"
