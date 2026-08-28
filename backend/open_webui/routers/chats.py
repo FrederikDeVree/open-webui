@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from open_webui.internal.db import get_async_session
 from open_webui.models.access_grants import AccessGrants
 from open_webui.models.config import Config
 from open_webui.models.chat_messages import ChatMessages
+from open_webui.models.groups import Groups
 from open_webui.models.chats import (
     AggregateChatStats,
     ChatBody,
@@ -36,13 +38,14 @@ from open_webui.models.shared_chats import SharedChatResponse, SharedChats
 from open_webui.models.tags import TagModel, Tags
 from open_webui.socket.main import get_event_emitter
 from open_webui.tasks import get_response_streams_by_chat_id, has_active_tasks, stop_item_tasks
-from open_webui.utils.access_control import filter_allowed_access_grants, has_permission
+from open_webui.utils.access_control import filter_allowed_access_grants, has_connection_access, has_permission
 from open_webui.utils.access_control.folders import has_folder_access, has_folder_write_access
 from open_webui.utils.auth import bearer_security, get_admin_user, get_current_user, get_verified_user
 from open_webui.utils.chat_fork import build_fork_history
 from open_webui.utils.context_compaction import compact_chat_branch, get_chat_context_usage
 from open_webui.utils.misc import get_message_list
 from open_webui.utils.models import get_all_models
+from open_webui.utils.terminals import delete_terminal_chat_attachments
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1597,9 +1600,44 @@ async def delete_chat_by_id(
     await Chats.delete_orphan_tags_for_user(chat.meta.get('tags', []), user.id, threshold=1, db=db)
 
     # Cascade to internal child chats spawned from this one.
-    for child_id in await Chats.get_internal_chat_ids_by_parent_id(id, chat.user_id):
+    child_ids = await Chats.get_internal_chat_ids_by_parent_id(id, chat.user_id)
+
+    # Collect terminal attachment folders to clean up BEFORE deleting anything.
+    def _terminal_ids(chat_obj) -> set[str]:
+        history = (chat_obj.chat or {}).get('history', {})
+        messages = get_message_list(history.get('messages', {}), history.get('currentId'))
+        return {m.get('meta', {}).get('terminal_id') for m in messages if m.get('meta', {}).get('terminal_id')}
+
+    terminal_ids = _terminal_ids(chat)
+    for child_id in child_ids:
         await stop_item_tasks(request.app.state.redis, child_id)
+        child = await Chats.get_chat_by_id_and_user_id(child_id, chat.user_id, db=db)
+        if child:
+            terminal_ids |= _terminal_ids(child)
         await Chats.delete_chat_by_id_and_user_id(child_id, chat.user_id)
+
+    # Best-effort cleanup of per-chat terminal attachment folders
+    # (<home>/chat_attachments/<chat_id>/). Never blocks chat deletion.
+    try:
+        if terminal_ids:
+            connections = await Config.get('terminal_server.connections', []) or []
+            user_group_ids = {group.id for group in await Groups.get_groups_by_member_id(user.id)}
+
+            async def _cleanup(terminal_id: str, chat_id: str):
+                connection = next((c for c in connections if c.get('id') == terminal_id), None)
+                if not connection or not connection.get('enabled', True):
+                    return
+                if not await has_connection_access(user, connection, user_group_ids):
+                    return
+                await delete_terminal_chat_attachments(connection, chat_id, user.id)
+
+            await asyncio.gather(
+                *(_cleanup(tid, id) for tid in terminal_ids),
+                *(_cleanup(tid, child_id) for tid in terminal_ids for child_id in child_ids),
+                return_exceptions=True,
+            )
+    except Exception as e:
+        log.warning('Terminal attachment cleanup failed for chat %s: %s', id, e)
 
     if user.role == 'admin':
         result = await Chats.delete_chat_by_id(id, db=db)

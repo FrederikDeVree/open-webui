@@ -1,8 +1,14 @@
 """Shared routing helpers for admin-configured terminal servers."""
 
+import logging
 from urllib.parse import quote
 
+import aiohttp
+from open_webui.env import AIOHTTP_CLIENT_SESSION_SSL
 from open_webui.utils.chat_id import is_saved_chat_id
+from open_webui.utils.headers import bearer_auth_header
+
+log = logging.getLogger(__name__)
 
 TERMINAL_CONTEXT_HEADER = 'X-Terminal-Context-Id'
 TERMINAL_CONTEXT_DEFAULT = 'default'
@@ -111,3 +117,67 @@ def terminal_chat_uploads(connection: dict) -> str:
     """Return normalized main-chat upload behavior for this connection."""
     value = (connection.get('config') or {}).get('chat_uploads')
     return value if value in TERMINAL_CHAT_UPLOAD_MODES else 'default'
+
+
+async def delete_terminal_chat_attachments(connection: dict, chat_id: str, user_id: str) -> None:
+    """Delete the per-chat attachments folder (``<home>/chat_attachments/<chat_id>``)
+    on a terminal server.
+
+    Best effort: any failure (unknown home dir, unreachable server, missing
+    endpoint) is logged and swallowed so chat deletion is never blocked.
+    """
+    if not chat_id or not is_saved_chat_id(chat_id):
+        return
+
+    base_url = get_terminal_server_url(connection)
+    if not base_url:
+        return
+
+    headers = {'Content-Type': 'application/json', 'X-User-Id': user_id, 'X-Session-Id': chat_id}
+    auth_type = connection.get('auth_type', 'bearer')
+    if auth_type == 'bearer':
+        headers.update(bearer_auth_header(connection.get('key', '')))
+    # 'session' / 'system_oauth' auth require a live request (cookies / OAuth
+    # session); there is no user credential to call the server with here, so
+    # skip cleanup for those rather than guess.
+    if auth_type not in {'bearer', 'none'}:
+        log.debug('Skipping terminal attachment cleanup for %s (auth_type=%s)', chat_id, auth_type)
+        return
+
+    try:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=10),
+            trust_env=True,
+        ) as session:
+            # Resolve the home dir; the attachments folder is anchored there.
+            async with session.get(
+                f'{base_url}/files/cwd', headers=headers, ssl=AIOHTTP_CLIENT_SESSION_SSL
+            ) as resp:
+                if resp.status != 200:
+                    log.debug('Attachment cleanup: /files/cwd returned %s for chat %s', resp.status, chat_id)
+                    return
+                data = await resp.json()
+            home = data.get('home') or data.get('cwd')
+            if not home:
+                return
+
+            attachments_path = f'{home.rstrip("/")}/chat_attachments/{chat_id}'
+            async with session.request(
+                'DELETE',
+                f'{base_url}/files/delete?path={quote(attachments_path, safe="")}',
+                headers=headers,
+                ssl=AIOHTTP_CLIENT_SESSION_SSL,
+            ) as resp:
+                if resp.status >= 500:
+                    body = await resp.text()
+                    log.warning(
+                        'Failed to delete terminal attachments for chat %s: HTTP %s %s',
+                        chat_id,
+                        resp.status,
+                        body[:200],
+                    )
+                elif resp.status >= 400:
+                    # 404 is expected when the chat never uploaded any files.
+                    log.debug('Terminal attachment delete for chat %s: HTTP %s', chat_id, resp.status)
+    except Exception as e:
+        log.warning('Failed to delete terminal attachments for chat %s: %s', chat_id, e)

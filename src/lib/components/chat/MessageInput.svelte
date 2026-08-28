@@ -58,7 +58,8 @@
 		getWeekday
 	} from '$lib/utils';
 	import { uploadFile } from '$lib/apis/files';
-	import { getCwd, uploadToTerminal } from '$lib/apis/terminal';
+	import { createDirectory, getCwd, uploadToTerminal } from '$lib/apis/terminal';
+	import { isSavedChatId } from '$lib/utils/chatId';
 	import { generateAutoCompletion } from '$lib/apis';
 	import { deleteFileById } from '$lib/apis/files';
 	import { getChatById } from '$lib/apis/chats';
@@ -952,22 +953,44 @@
 		if (filesystemUploadTerminal && (chatUploadMode === 'filesystem' || chatUploadMode === 'both')) {
 			let terminalUploadSucceeded = false;
 			try {
-				const cwd =
-					(
-						await getCwd(
-							filesystemUploadTerminal.url,
-							filesystemUploadTerminal.key,
-							chatId || undefined
-						)
-					)?.cwd || '/';
-				const uploadedFile = await uploadToTerminal(
+				const cwdInfo = await getCwd(
 					filesystemUploadTerminal.url,
 					filesystemUploadTerminal.key,
-					cwd,
+					chatId || undefined
+				);
+				// Saved chats: keep attachments in a conversation-specific subfolder so
+				// they don't clutter the terminal's home dir. Temp chats upload to cwd.
+				const cwdDir = cwdInfo?.cwd || '/';
+				let uploadDir = cwdDir;
+				if (isSavedChatId(chatId)) {
+					const baseDir = cwdInfo?.home || cwdDir;
+					uploadDir = `${baseDir.replace(/\/+$/, '')}/chat_attachments/${chatId}`;
+					// Best effort: ignore failures (the folder may already exist).
+					await createDirectory(
+						filesystemUploadTerminal.url,
+						filesystemUploadTerminal.key,
+						uploadDir,
+						chatId || undefined
+					);
+				}
+				let uploadedFile = await uploadToTerminal(
+					filesystemUploadTerminal.url,
+					filesystemUploadTerminal.key,
+					uploadDir,
 					file,
 					chatId || undefined
 				);
-
+				// If the per-chat folder upload failed (e.g. mkdir unsupported),
+				// fall back to the terminal's cwd.
+				if (!uploadedFile && uploadDir !== cwdDir) {
+					uploadedFile = await uploadToTerminal(
+						filesystemUploadTerminal.url,
+						filesystemUploadTerminal.key,
+						cwdDir,
+						file,
+						chatId || undefined
+					);
+				}
 				if (uploadedFile) {
 					fileItem.terminal_path = uploadedFile.path;
 					terminalUploadSucceeded = true;

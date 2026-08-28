@@ -1214,12 +1214,12 @@ async def get_tool_servers(request: Request):
         return getattr(request.app.state, 'TOOL_SERVERS', None) or []
 
 
-async def get_terminal_cwd(
+async def get_terminal_cwd_info(
     base_url: str,
     headers: dict,
     cookies: dict | None = None,
-) -> str | None:
-    """Fetch the current working directory from a terminal server."""
+) -> tuple[str | None, str | None]:
+    """Fetch the current working directory and home directory from a terminal server."""
     try:
         cwd_url = f'{base_url.rstrip("/")}/files/cwd'
         async with aiohttp.ClientSession(
@@ -1231,10 +1231,10 @@ async def get_terminal_cwd(
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    return data.get('cwd')
+                    return data.get('cwd'), data.get('home')
     except Exception as e:
         log.debug('Failed to fetch terminal CWD: %s', e)
-    return None
+    return None, None
 
 
 async def get_terminal_system_prompt(
@@ -1425,8 +1425,8 @@ async def get_terminal_tools(
         headers[TERMINAL_CONTEXT_HEADER] = context_id
 
     # Fetch live with the user's credentials so prompt changes apply without a restart
-    terminal_cwd, system_prompt = await asyncio.gather(
-        get_terminal_cwd(server_data['url'], headers, cookies),
+    (terminal_cwd, terminal_home), system_prompt = await asyncio.gather(
+        get_terminal_cwd_info(server_data['url'], headers, cookies),
         get_terminal_system_prompt(server_data['url'], headers, cookies),
     )
     if not system_prompt:
@@ -1481,6 +1481,20 @@ async def get_terminal_tools(
         system_prompt = f'{system_prompt}\n\n{FILE_PATH_INSTRUCTION}'
     else:
         system_prompt = FILE_PATH_INSTRUCTION
+
+    # Tell the model where this conversation's file attachments live so it reads them
+    # via the exact terminal_path values instead of guessing (which yields 404s), and
+    # keep its own output out of the attachments folder.
+    if is_saved_chat_id(session_id) and terminal_home:
+        attachments_dir = f'{terminal_home.rstrip("/")}/chat_attachments/{session_id}'
+        system_prompt = (
+            f'{system_prompt}\n\n'
+            f'File attachments from the user in this conversation are stored in `{attachments_dir}`. '
+            f'Always use the exact `terminal_path` values given in the attached-files context to read them; '
+            f'do not guess or construct other locations. '
+            f'Do NOT write your own output files into that attachments folder; '
+            f'write output files to the working directory or home directory as usual.'
+        )
 
     return tools_dict, system_prompt
 
