@@ -1482,19 +1482,31 @@ async def get_terminal_tools(
     else:
         system_prompt = FILE_PATH_INSTRUCTION
 
-    # Tell the model where this conversation's file attachments live so it reads them
-    # via the exact terminal_path values instead of guessing (which yields 404s), and
-    # keep its own output out of the attachments folder.
-    if is_saved_chat_id(session_id) and terminal_home:
-        attachments_dir = f'{terminal_home.rstrip("/")}/chat_attachments/{session_id}'
-        system_prompt = (
-            f'{system_prompt}\n\n'
-            f'File attachments from the user in this conversation are stored in `{attachments_dir}`. '
-            f'Always use the exact `terminal_path` values given in the attached-files context to read them; '
-            f'do not guess or construct other locations. '
-            f'Do NOT write your own output files into that attachments folder; '
-            f'write output files to the working directory or home directory as usual.'
-        )
+    # Teach the model the <file> tag contract. Only the parts that apply to this
+    # request are included: the view_file/`id` legend is omitted when the model has
+    # file_context (the tag then carries no id), and the attachments-dir note only
+    # when a home dir is known.
+    if is_saved_chat_id(session_id):
+        model_meta = (extra_params.get('__model__') or {}).get('info', {}).get('meta', {})
+        file_context_enabled = (model_meta.get('capabilities') or {}).get('file_context', True)
+
+        file_guidance_parts = []
+        if not file_context_enabled:
+            file_guidance_parts.append(
+                'Attached files appear as <file .../> tags in the user messages. '
+                'The `id` attribute is for the view_file tool only; '
+                'the `path` attribute is the absolute filesystem path, for terminal tools only '
+                '(read_file, run_command, display_file). Never mix the two.'
+            )
+        if terminal_home:
+            attachments_dir = f'{terminal_home.rstrip("/")}/chat_attachments/{session_id}'
+            file_guidance_parts.append(
+                f'User attachments for this conversation are stored in `{attachments_dir}`. '
+                'Do NOT write your own output files into that attachments folder; '
+                'write output files to the working directory or home directory as usual.'
+            )
+        if file_guidance_parts:
+            system_prompt = f'{system_prompt}\n\n' + ' '.join(file_guidance_parts)
 
     return tools_dict, system_prompt
 

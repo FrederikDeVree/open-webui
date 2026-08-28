@@ -268,6 +268,12 @@ def _maybe_inline_terminal_display_file(name: str, params: dict, tool: dict | No
         return params  # model explicitly chose inline / not-inline; respect it
     try:
         settings = getattr(user, 'settings', None) or {}
+        # ``user.settings`` is a ``UserSettings`` Pydantic model (not a dict)
+        # on a ``UserModel``; normalize to a dict so ``.get`` works.
+        if hasattr(settings, 'model_dump'):
+            settings = settings.model_dump()
+        elif not isinstance(settings, dict):
+            settings = {}
     except Exception:
         settings = {}
     if settings.get('terminalFileDisplay') != 'sidebar':
@@ -2007,9 +2013,13 @@ async def get_image_urls(delta_images, request, metadata, user) -> list[str]:
     return image_urls
 
 
-async def add_file_context(messages: list, chat_id: str, user) -> list:
+async def add_file_context(messages: list, chat_id: str, user, model: dict | None = None) -> list:
     """
     Add file URLs to messages for native function calling.
+
+    When the model has the ``file_context`` capability, file contents are already
+    provided in the prompt, so the chat-store ``id`` (used by view_file) is omitted
+    to avoid confusing it with filesystem paths.
     """
     if not is_saved_chat_id(chat_id):
         return messages
@@ -2021,13 +2031,20 @@ async def add_file_context(messages: list, chat_id: str, user) -> list:
     history = chat.chat.get('history', {})
     stored_messages = get_message_list(history.get('messages', {}), history.get('currentId'))
 
+    file_context_enabled = ((model or {}).get('info', {}).get('meta', {}).get('capabilities') or {}).get(
+        'file_context', True
+    )
+
     def format_file_tag(file):
         # Every file reaching here has a url or a chat id, so id is always set.
-        attrs = f'type="{file.get("type", "file")}" id="{file.get("id") or file.get("url")}"'
+        if file_context_enabled:
+            attrs = f'type="{file.get("type", "file")}"'
+        else:
+            attrs = f'type="{file.get("type", "file")}" id="{file.get("id") or file.get("url")}"'
         if file.get('url'):
             attrs += f' url="{file["url"]}"'
         if file.get('terminal_path'):
-            attrs += f' terminal_path="{file["terminal_path"]}"'
+            attrs += f' path="{file["terminal_path"]}"'
         if file.get('content_type'):
             attrs += f' content_type="{file["content_type"]}"'
         if file.get('name'):
@@ -3391,7 +3408,9 @@ async def process_chat_payload(request, form_data, user, metadata, model):
         if use_builtin_tools:
             # Add file context to user messages
             chat_id = metadata.get('chat_id')
-            form_data['messages'] = await add_file_context(form_data.get('messages', []), chat_id, user)
+            form_data['messages'] = await add_file_context(
+                form_data.get('messages', []), chat_id, user, models[task_model_id]
+            )
 
             if (model.get('info', {}).get('meta', {}).get('builtinTools') or {}).get('knowledge', True):
                 from html import escape
