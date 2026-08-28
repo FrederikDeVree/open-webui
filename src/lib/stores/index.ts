@@ -256,6 +256,7 @@ type Settings = {
 	scrollOnResponseGeneration?: boolean;
 	showFilesOnTerminalSelect?: boolean;
 	terminalFileDisplay?: 'sidebar' | 'inline';
+	chatFadeStreamingText?: boolean;
 	directConnections?: null;
 	chatBubble?: boolean;
 	copyFormatted?: boolean;

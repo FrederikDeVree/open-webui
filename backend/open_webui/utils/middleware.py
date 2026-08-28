@@ -254,8 +254,8 @@ def output_id(prefix: str) -> str:
 
 def _maybe_inline_terminal_display_file(name: str, params: dict, tool: dict | None, user) -> dict:
     """Inject ``inline=True`` into a terminal ``display_file`` call when the user's
-    ``terminalFileDisplay`` setting is ``'inline'`` and the model did not specify
-    ``inline`` itself.
+    ``terminalFileDisplay`` setting is not ``'sidebar'`` (default: inline) and the
+    model did not specify ``inline`` itself.
 
     Direct (user-configured) terminals get this behavior in the frontend
     (``defaultInline`` in ``+layout.svelte``). System (admin-configured) terminals
@@ -270,7 +270,7 @@ def _maybe_inline_terminal_display_file(name: str, params: dict, tool: dict | No
         settings = getattr(user, 'settings', None) or {}
     except Exception:
         settings = {}
-    if settings.get('terminalFileDisplay') == 'inline':
+    if settings.get('terminalFileDisplay') != 'sidebar':
         new_params = dict(params)
         new_params['inline'] = True
         return new_params

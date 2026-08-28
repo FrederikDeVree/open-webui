@@ -504,7 +504,7 @@
 			data?.name === 'display_file' &&
 			data?.params?.path &&
 			data?.params?.inline === undefined &&
-			$settings?.terminalFileDisplay === 'inline' &&
+			$settings?.terminalFileDisplay !== 'sidebar' &&
 			isDirectTerminalServer(data.server?.url);
 		const params = defaultInline ? { ...data.params, inline: true } : data?.params;
 		const serverParams = data?.name === 'display_file' && params ? { ...params } : params;

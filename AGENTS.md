@@ -186,11 +186,14 @@ Let the user browse/download files from connected terminal servers, and make mod
 - `src/routes/+layout.svelte` — terminal server mapping (proxy URL + session key for FileNav browsing).
 - `backend/open_webui/routers/terminals.py`, `backend/open_webui/utils/terminals.py` — terminal proxy/context utilities.
 - **Status:** the "clickable markdown path" part (`terminal-download://` + `TERMINAL_PATH_RE` + `downloadTerminalFile`
-	+ the two Markdown token files) is **superseded by upstream's `display_file` tool** (upstream 0.11.1: `TerminalOutputFile.svelte`,
-	`terminalFileDisplay` setting, `terminal:display_file` socket event). Decision: **drop the clickable-path part, keep upstream's
-	`display_file`**. **Done in the v0.11.1 merge**: the clickable-path code was removed from `MarkdownInlineTokens.svelte`
-	(only the pyodide scheme remains there). `src/lib/utils/terminal.ts` is now **orphaned — safe to delete**. The `FileNav`
-	`homePath`/`clampToHome` clamping and the terminal proxy utils remain local and should be kept.
+	+ the two Markdown token files) **coexists with** upstream's `display_file` tool (upstream 0.11.1: `TerminalOutputFile.svelte`,
+	`terminalFileDisplay` setting, `terminal:display_file` socket event). Upstream's inline `display_file` card is NOT a good
+	replacement for clickable paths in plain markdown, so **both are kept**. **Done after the v0.11.1 merge (2026-08-28)**:
+	the clickable-path code was re-added to `MarkdownInlineTokens.svelte` (terminal scheme + terminal-server-origin path
+	interception in `handleLinkClick` + `isTerminalDownload` branch) and `CodespanToken.svelte` (`isTerminalPath`/`isPyodidePath`
+	branches), merged with upstream's `chatFadeStreamingText` fade, `underline` token and `allowExternal` image support.
+	`src/lib/utils/terminal.ts` is **in use again — do not delete**. The `FileNav` `homePath`/`clampToHome` clamping and the
+	terminal proxy utils also remain local and should be kept.
 
 ### 2. Send message while attachments upload (user feature — SUPERSEDED)
 Block-and-wait: while non-image files are still `uploading`, the send handler polls until they finish.
@@ -268,7 +271,7 @@ Global config to default file attachments to full-context mode.
 	`Chat.svelte` (upstream moved it; a new copy using `getUsageTokenCount` sits just below the old location), and all px→rem unit
 	conversions (upstream's "Interface scaling" work).
 - **Drop** local test deps `moto[s3]`, `docker`, `pytest`, `pytest-docker` from `pyproject.toml` `[all]` and `uv.lock`.
-- **Keep** local: items 1 (FileNav home-path + terminal proxy), 3, 4, 5, 6, 7, 8, 9, 10.
+- **Keep** local: items 1 (clickable terminal paths + FileNav home-path + terminal proxy), 3, 4, 5, 6, 7, 8, 9, 10.
 
 ### Merge mechanics (gotchas for the next upstream merge)
 - **`git checkout --theirs <many paths>` is atomic**: if even one path has no "theirs" stage (e.g. a delete/modify `UD` conflict),
