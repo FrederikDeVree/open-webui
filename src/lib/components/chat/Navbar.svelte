@@ -7,11 +7,14 @@
 		banners,
 		chatId,
 		config,
+		controlsActiveTab,
 		mobile,
 		settings,
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
+		selectedTerminalId,
+		terminalServers,
 		user
 	} from '$lib/stores';
 
@@ -52,6 +55,14 @@
 	export let archiveChatHandler: (id: string) => void;
 	export let deleteChatHandler: (id: string) => void;
 	export let moveChatHandler: (id: string, folderId: string) => void;
+	export let codeInterpreterEnabled: boolean = false;
+
+	$: showFilesButton =
+		($selectedTerminalId &&
+			(($terminalServers ?? []).some((t) => t.id && t.id === $selectedTerminalId) ||
+				$user?.role === 'admin' ||
+				($user?.permissions?.features?.direct_tool_servers ?? true))) ||
+		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
 
 	let closedBannerIds = [];
 
@@ -230,12 +241,36 @@
 						</Tooltip>
 					{/if}
 
+					{#if showFilesButton}
+						<button
+							class="flex cursor-pointer px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {$showControls && $controlsActiveTab === 'files'
+								? 'bg-gray-100 dark:bg-gray-800 font-medium text-gray-900 dark:text-white'
+								: 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}"
+							on:click={async () => {
+								if ($showControls && $controlsActiveTab === 'files') {
+									showControls.set(false);
+								} else {
+									controlsActiveTab.set('files');
+									showControls.set(true);
+								}
+							}}
+							aria-label="Files"
+						>
+							{$i18n.t('Files')}
+						</button>
+					{/if}
+
 					{#if $user?.role === 'admin' || ($user?.permissions.chat?.controls ?? true)}
 						<Tooltip content={$i18n.t('Controls')}>
 							<button
 								class="flex size-6 cursor-pointer items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-50/40 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800/40 dark:hover:text-gray-200"
 								on:click={async () => {
-									await showControls.set(!$showControls);
+									if ($showControls && $controlsActiveTab === 'controls') {
+										await showControls.set(false);
+									} else {
+										controlsActiveTab.set('controls');
+										await showControls.set(true);
+									}
 								}}
 								aria-label="Controls"
 							>

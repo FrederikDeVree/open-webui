@@ -7,6 +7,7 @@
 	import {
 		config,
 		terminalServers,
+		controlsActiveTab,
 		showControls,
 		showCallOverlay,
 		showArtifacts,
@@ -58,6 +59,12 @@
 	// svelte-ignore reactive_declaration_module_script_dependency
 	$: {
 		savedTab = activeTab;
+		controlsActiveTab.set(activeTab);
+	}
+
+	// When the store is set externally (e.g. from Navbar), update activeTab
+	$: if ($controlsActiveTab !== activeTab) {
+		activeTab = $controlsActiveTab;
 	}
 
 	$: hasMessages = history?.messages && Object.keys(history.messages).length > 0;

@@ -4314,6 +4314,7 @@
 							title={$chatTitle}
 							shareEnabled={!!history.currentId}
 							{initNewChat}
+							{codeInterpreterEnabled}
 							scrollToTop={!isNearTop ? scrollToTop : null}
 							{archiveChatHandler}
 							{deleteChatHandler}
