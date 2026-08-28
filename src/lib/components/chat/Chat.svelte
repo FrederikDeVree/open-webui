@@ -3919,14 +3919,14 @@
 	// new conversation). The chat is created here instead of on first send so the
 	// upload can target the per-chat attachments folder.
 	const ensureChatIdHandler = async () => {
-		console.log('[ensureChatId] called', {
+		console.warn('[ensureChatId] called', {
 			chatId: $chatId,
 			temporaryChatEnabled: $temporaryChatEnabled
 		});
 		if ($temporaryChatEnabled || $chatId) return $chatId || null;
 		try {
 			const id = await initChatHandler(history);
-			console.log('[ensureChatId] created chat:', id, 'store now:', $chatId);
+			console.warn('[ensureChatId] created chat:', id, 'store now:', $chatId);
 			return id || null;
 		} catch (e) {
 			console.error('Failed to create chat for file upload:', e);

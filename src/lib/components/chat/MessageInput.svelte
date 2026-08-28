@@ -957,7 +957,7 @@
 		if (filesystemUploadTerminal && (chatUploadMode === 'filesystem' || chatUploadMode === 'both')) {
 			let terminalUploadSucceeded = false;
 			try {
-				console.log('[terminal-upload] start', {
+				console.warn('[terminal-upload] start', {
 					file: file.name,
 					chatId,
 					temporaryChatEnabled: $temporaryChatEnabled,
@@ -970,14 +970,14 @@
 				// the upload lands in the right place.
 				if (!chatId && !$temporaryChatEnabled && onEnsureChatId) {
 					chatId = (await onEnsureChatId()) || '';
-					console.log('[terminal-upload] ensured chatId:', chatId);
+					console.warn('[terminal-upload] ensured chatId:', chatId);
 				}
 				const cwdInfo = await getCwd(
 					filesystemUploadTerminal.url,
 					filesystemUploadTerminal.key,
 					chatId || undefined
 				);
-				console.log('[terminal-upload] cwdInfo:', cwdInfo);
+				console.warn('[terminal-upload] cwdInfo:', cwdInfo);
 				// Saved chats: keep attachments in a conversation-specific subfolder so
 				// they don't clutter the terminal's home dir. Temp chats upload to cwd.
 				const cwdDir = cwdInfo?.cwd || '/';
@@ -992,9 +992,9 @@
 						uploadDir,
 						chatId || undefined
 					);
-					console.log('[terminal-upload] mkdir', { uploadDir, created });
+					console.warn('[terminal-upload] mkdir', { uploadDir, created });
 				} else {
-					console.log('[terminal-upload] NOT a saved chat id, using cwd', {
+					console.warn('[terminal-upload] NOT a saved chat id, using cwd', {
 						chatId,
 						isSaved: isSavedChatId(chatId)
 					});
@@ -1009,7 +1009,7 @@
 				// If the per-chat folder upload failed (e.g. mkdir unsupported),
 				// fall back to the terminal's cwd.
 				if (!uploadedFile && uploadDir !== cwdDir) {
-					console.log('[terminal-upload] folder upload failed, falling back to cwd', {
+					console.warn('[terminal-upload] folder upload failed, falling back to cwd', {
 						uploadDir,
 						cwdDir
 					});
@@ -1021,7 +1021,7 @@
 						chatId || undefined
 					);
 				}
-				console.log('[terminal-upload] uploaded to:', uploadedFile?.files?.map((f) => f.path));
+				console.warn('[terminal-upload] uploaded to:', uploadedFile?.files?.map((f) => f.path));
 				if (uploadedFile) {
 					fileItem.terminal_path = uploadedFile.path;
 					terminalUploadSucceeded = true;
