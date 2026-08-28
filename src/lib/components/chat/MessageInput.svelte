@@ -957,18 +957,27 @@
 		if (filesystemUploadTerminal && (chatUploadMode === 'filesystem' || chatUploadMode === 'both')) {
 			let terminalUploadSucceeded = false;
 			try {
+				console.log('[terminal-upload] start', {
+					file: file.name,
+					chatId,
+					temporaryChatEnabled: $temporaryChatEnabled,
+					hasOnEnsureChatId: !!onEnsureChatId,
+					chatUploadMode
+				});
 				// On the first step of a new conversation the chat doesn't exist yet,
 				// so there is no chat id to anchor the per-chat attachments folder.
 				// Create it now (the chat would be created on first send anyway) so
 				// the upload lands in the right place.
 				if (!chatId && !$temporaryChatEnabled && onEnsureChatId) {
 					chatId = (await onEnsureChatId()) || '';
+					console.log('[terminal-upload] ensured chatId:', chatId);
 				}
 				const cwdInfo = await getCwd(
 					filesystemUploadTerminal.url,
 					filesystemUploadTerminal.key,
 					chatId || undefined
 				);
+				console.log('[terminal-upload] cwdInfo:', cwdInfo);
 				// Saved chats: keep attachments in a conversation-specific subfolder so
 				// they don't clutter the terminal's home dir. Temp chats upload to cwd.
 				const cwdDir = cwdInfo?.cwd || '/';
@@ -977,12 +986,18 @@
 					const baseDir = cwdInfo?.home || cwdDir;
 					uploadDir = `${baseDir.replace(/\/+$/, '')}/chat_attachments/${chatId}`;
 					// Best effort: ignore failures (the folder may already exist).
-					await createDirectory(
+					const created = await createDirectory(
 						filesystemUploadTerminal.url,
 						filesystemUploadTerminal.key,
 						uploadDir,
 						chatId || undefined
 					);
+					console.log('[terminal-upload] mkdir', { uploadDir, created });
+				} else {
+					console.log('[terminal-upload] NOT a saved chat id, using cwd', {
+						chatId,
+						isSaved: isSavedChatId(chatId)
+					});
 				}
 				let uploadedFile = await uploadToTerminal(
 					filesystemUploadTerminal.url,
@@ -994,6 +1009,10 @@
 				// If the per-chat folder upload failed (e.g. mkdir unsupported),
 				// fall back to the terminal's cwd.
 				if (!uploadedFile && uploadDir !== cwdDir) {
+					console.log('[terminal-upload] folder upload failed, falling back to cwd', {
+						uploadDir,
+						cwdDir
+					});
 					uploadedFile = await uploadToTerminal(
 						filesystemUploadTerminal.url,
 						filesystemUploadTerminal.key,
@@ -1002,6 +1021,7 @@
 						chatId || undefined
 					);
 				}
+				console.log('[terminal-upload] uploaded to:', uploadedFile?.files?.map((f) => f.path));
 				if (uploadedFile) {
 					fileItem.terminal_path = uploadedFile.path;
 					terminalUploadSucceeded = true;
