@@ -138,6 +138,10 @@
 	export let contextUsage = null;
 	export let contextCompactionEnabled = false;
 	export let embedded = false;
+	// Called when a file is attached before a chat exists (first step of a new
+	// conversation). It should create the chat and return its id so the terminal
+	// upload can target the per-chat attachments folder; return null to skip.
+	export let onEnsureChatId: (() => Promise<string | null>) | null = null;
 
 	export let autoScroll = false;
 	export let generating = false;
@@ -953,6 +957,13 @@
 		if (filesystemUploadTerminal && (chatUploadMode === 'filesystem' || chatUploadMode === 'both')) {
 			let terminalUploadSucceeded = false;
 			try {
+				// On the first step of a new conversation the chat doesn't exist yet,
+				// so there is no chat id to anchor the per-chat attachments folder.
+				// Create it now (the chat would be created on first send anyway) so
+				// the upload lands in the right place.
+				if (!chatId && !$temporaryChatEnabled && onEnsureChatId) {
+					chatId = (await onEnsureChatId()) || '';
+				}
 				const cwdInfo = await getCwd(
 					filesystemUploadTerminal.url,
 					filesystemUploadTerminal.key,
@@ -966,15 +977,12 @@
 					const baseDir = cwdInfo?.home || cwdDir;
 					uploadDir = `${baseDir.replace(/\/+$/, '')}/chat_attachments/${chatId}`;
 					// Best effort: ignore failures (the folder may already exist).
-					const createdDir = await createDirectory(
+					await createDirectory(
 						filesystemUploadTerminal.url,
 						filesystemUploadTerminal.key,
 						uploadDir,
 						chatId || undefined
 					);
-					if (!createdDir) {
-						console.warn('createDirectory failed for', uploadDir, '(may already exist)');
-					}
 				}
 				let uploadedFile = await uploadToTerminal(
 					filesystemUploadTerminal.url,
@@ -986,9 +994,6 @@
 				// If the per-chat folder upload failed (e.g. mkdir unsupported),
 				// fall back to the terminal's cwd.
 				if (!uploadedFile && uploadDir !== cwdDir) {
-					console.warn(
-						`Terminal upload to ${uploadDir} failed; falling back to ${cwdDir}`
-					);
 					uploadedFile = await uploadToTerminal(
 						filesystemUploadTerminal.url,
 						filesystemUploadTerminal.key,

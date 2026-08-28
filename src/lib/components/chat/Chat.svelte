@@ -3915,6 +3915,20 @@
 		}
 	};
 
+	// Ensure a chat exists before a file is uploaded to a terminal (first step of a
+	// new conversation). The chat is created here instead of on first send so the
+	// upload can target the per-chat attachments folder.
+	const ensureChatIdHandler = async () => {
+		if ($temporaryChatEnabled || $chatId) return $chatId || null;
+		try {
+			const id = await initChatHandler(history);
+			return id || null;
+		} catch (e) {
+			console.error('Failed to create chat for file upload:', e);
+			return null;
+		}
+	};
+
 	const initChatHandler = async (history) => {
 		let _chatId = $chatId;
 		const selectedFolderId = $selectedFolder?.id;
@@ -4451,6 +4465,7 @@
 										{createMessagePair}
 										{onUpload}
 										{onUpdate}
+										onEnsureChatId={ensureChatIdHandler}
 										messageQueue={$chatRequestQueues[$chatId] ?? []}
 										{chatTasks}
 										askUser={savedAskUserPrompt ?? socketAskUserPrompt}
@@ -4543,6 +4558,7 @@
 										{createMessagePair}
 										{onUpload}
 										{onUpdate}
+										onEnsureChatId={ensureChatIdHandler}
 										messageQueue={$chatRequestQueues[$chatId] ?? []}
 										{chatTasks}
 										askUser={savedAskUserPrompt ?? socketAskUserPrompt}
