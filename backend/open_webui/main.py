@@ -1306,6 +1306,11 @@ async def chat_completion(
         if (is_new_chat or is_first_turn_of_precreated_chat) and tasks and TASKS.TITLE_GENERATION in tasks:
             initial_title_generation = tasks.pop(TASKS.TITLE_GENERATION)
 
+        # Populated in the new-chat / existing-chat branches below; guarded here
+        # so the initial title-generation check after the try block can't raise
+        # NameError for chat ids that go through neither branch (e.g. temp chats).
+        all_assistant_ids = []
+
         if metadata.get('chat_id') and user:
             chat_id = metadata['chat_id']
 
@@ -1471,28 +1476,6 @@ async def chat_completion(
                             log.debug('Error inserting chat files: %s', e)
                             pass
 
-                    if initial_title_generation is not None and all_assistant_ids:
-                        title_metadata = {
-                            **metadata,
-                            'message_id': all_assistant_ids[0],
-                        }
-                        event_emitter = await get_event_emitter(title_metadata, update_db=False)
-                        title_ctx = {
-                            'request': request,
-                            'form_data': form_data,
-                            'user': user,
-                            'metadata': title_metadata,
-                            'tasks': {TASKS.TITLE_GENERATION: initial_title_generation},
-                            'event_emitter': event_emitter,
-                        }
-
-                        async def run_initial_title_generation():
-                            try:
-                                await background_tasks_handler(title_ctx)
-                            except Exception as e:
-                                log.debug('Error generating initial chat title: %s', e)
-
-                        asyncio.create_task(run_initial_title_generation())
                 else:
                     # Existing chat — verify ownership
                     if not await Chats.is_chat_owner(chat_id, user.id) and user.role != 'admin':
@@ -1637,6 +1620,33 @@ async def chat_completion(
 
         request.state.metadata = metadata
         form_data['metadata'] = metadata
+
+        # Initial title generation for the first turn. Runs for both truly new
+        # chats (created above) and pre-created chats (the frontend pre-creates
+        # the chat before the first send when a file is attached, so the
+        # terminal upload can target the per-chat attachments folder).
+        if initial_title_generation is not None and all_assistant_ids:
+            title_metadata = {
+                **metadata,
+                'message_id': all_assistant_ids[0],
+            }
+            event_emitter = await get_event_emitter(title_metadata, update_db=False)
+            title_ctx = {
+                'request': request,
+                'form_data': form_data,
+                'user': user,
+                'metadata': title_metadata,
+                'tasks': {TASKS.TITLE_GENERATION: initial_title_generation},
+                'event_emitter': event_emitter,
+            }
+
+            async def run_initial_title_generation():
+                try:
+                    await background_tasks_handler(title_ctx)
+                except Exception as e:
+                    log.debug('Error generating initial chat title: %s', e)
+
+            asyncio.create_task(run_initial_title_generation())
 
     except HTTPException:
         raise
