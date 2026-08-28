@@ -1023,19 +1023,25 @@
 				}
 				console.warn('[terminal-upload] uploaded to:', uploadedFile?.files?.map((f) => f.path));
 				if (uploadedFile) {
-					fileItem.terminal_path = uploadedFile.path;
+					// The upload API returns { files: [{ path, size }] }; normalize to a
+					// single-file shape (also tolerate a top-level path if the server
+					// ever returns that).
+					const uploaded: { path: string; size?: number } =
+						(uploadedFile as any).files?.[0] ?? (uploadedFile as any);
+					const uploadedPath = uploaded.path;
+					fileItem.terminal_path = uploadedPath;
 					terminalUploadSucceeded = true;
 					if (chatUploadMode === 'filesystem') {
 						// Terminal-only: the file lives on the terminal, not in the chat context.
 						fileItem.type = 'filesystem';
 						fileItem.status = 'uploaded';
-						fileItem.id = uploadedFile.path;
-						fileItem.path = uploadedFile.path;
-						fileItem.url = uploadedFile.path;
-						fileItem.size = uploadedFile.size ?? file.size;
-						fileItem.file = uploadedFile;
+						fileItem.id = uploadedPath;
+						fileItem.path = uploadedPath;
+						fileItem.url = uploadedPath;
+						fileItem.size = uploaded.size ?? file.size;
+						fileItem.file = uploaded;
 						files = files;
-						showFileNavDir.set(uploadedFile.path);
+						showFileNavDir.set(uploadedPath);
 					}
 				}
 			} catch (e) {

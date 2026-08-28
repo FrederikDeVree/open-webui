@@ -4598,6 +4598,7 @@
 									bind:files
 									bind:prompt
 									bind:autoScroll
+									onEnsureChatId={ensureChatIdHandler}
 									bind:selectedToolIds
 									bind:selectedSkillIds
 									bind:selectedFilterIds

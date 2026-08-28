@@ -61,6 +61,7 @@
 	export let onUpload: Function = (e) => {};
 	export let onUpdate: (data?: { file?: any }) => void = () => {};
 	export let onSelect = (e) => {};
+	export let onEnsureChatId: (() => Promise<string | null>) | null = null;
 	export let onChange = (e) => {};
 	export let onWebSearchToggle: Function = () => {};
 	export let messageQueue: { id: string; prompt: string; files: any[] }[] = [];
@@ -256,6 +257,7 @@
 						{onChange}
 						{onUpload}
 						{onUpdate}
+						{onEnsureChatId}
 						{messageQueue}
 						{onQueueSendNow}
 						{onQueueEdit}
