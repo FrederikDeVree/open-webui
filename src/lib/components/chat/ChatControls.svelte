@@ -92,6 +92,9 @@
 		(codeInterpreterEnabled && $config?.code?.interpreter_engine !== 'jupyter');
 	$: showOverviewTab = hasMessages;
 
+	// Hide the tab bar (with close button) when only the Files tab is available
+	$: onlyFilesTab = showFilesTab && !showControlsTab && !showOverviewTab;
+
 	// Tab fallback: if active tab becomes hidden, switch to next available
 	$: if (!showOverviewTab && activeTab === 'overview') activeTab = 'controls';
 	$: if (!showFilesTab && activeTab === 'files') activeTab = 'controls';
@@ -228,13 +231,14 @@
 				{:else}
 					<!-- Controls + Files tabs -->
 					<div class="flex flex-col h-full min-h-0">
-						<!-- Tab bar -->
-						<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
-							<div class="flex gap-1 min-w-0 overflow-x-auto scrollbar-hidden">
-								{#if showControlsTab}
-									<button
-										class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
-										'controls'
+						{#if !onlyFilesTab}
+							<!-- Tab bar -->
+							<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
+								<div class="flex gap-1 min-w-0 overflow-x-auto scrollbar-hidden">
+									{#if showControlsTab}
+										<button
+											class="px-2.5 py-1 text-sm rounded-lg transition whitespace-nowrap {activeTab ===
+											'controls'
 											? 'bg-gray-100/40 dark:bg-gray-800/25 font-normal text-gray-700 dark:text-gray-200'
 											: 'text-gray-500 dark:text-gray-400 hover:bg-gray-100/30 dark:hover:bg-gray-800/20 hover:text-gray-600 dark:hover:text-gray-300'}"
 										on:click={() => (activeTab = 'controls')}
@@ -282,6 +286,7 @@
 								</svg>
 							</button>
 						</div>
+						{/if}
 
 						<div
 							class="flex-1 min-h-0 {activeTab === 'overview'
@@ -351,8 +356,9 @@
 				{:else}
 					<!-- Controls + Files tabs -->
 					<div class="flex flex-col h-full min-h-0">
-						<!-- Tab bar -->
-						<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
+						{#if !onlyFilesTab}
+							<!-- Tab bar -->
+							<div class="flex items-center justify-between px-2 pt-2 pb-2 shrink-0">
 							<div class="flex gap-1 min-w-0 overflow-x-auto scrollbar-hidden">
 								{#if showControlsTab}
 									<button
@@ -405,6 +411,7 @@
 								</svg>
 							</button>
 						</div>
+						{/if}
 
 						<div
 							class="flex-1 min-h-0 {activeTab === 'overview'
