@@ -3586,15 +3586,26 @@
 				id: responseMessageId,
 				...(messageIdsList ? { message_ids: messageIdsList } : {}),
 				parent_id: userMessage?.parentId ?? null,
+				// First turn of a chat that was pre-created before this send (file
+				// attachments ensure the chat exists at upload time). Tells the backend
+				// to run initial title/tags generation despite the chat_id being set.
+				new_chat:
+					!$temporaryChatEnabled &&
+					!!_chatId &&
+					(userMessage?.parentId ?? null) === null &&
+					createMessagesList(_history, responseMessageId).length === 2,
 				user_message: userMessage,
 				...(regenerationPrompt ? { regeneration_prompt: regenerationPrompt } : {}),
 				...(continueResponse ? { assistant_message_id: responseMessageId } : {}),
 
 				background_tasks: {
+					// Title/tags generation for the first turn. `_chatId` may already be
+					// set when the chat was pre-created before the first send (embedded
+					// chats, or file attachments that ensure the chat exists), so also
+					// match on "this is the first user+response pair".
 					...(!$temporaryChatEnabled &&
 					(!_chatId ||
-						(embedded &&
-							(userMessage?.parentId ?? null) === null &&
+						((userMessage?.parentId ?? null) === null &&
 							createMessagesList(_history, responseMessageId).length === 2))
 						? {
 								title_generation: $settings?.title?.auto ?? true,
@@ -3919,14 +3930,9 @@
 	// new conversation). The chat is created here instead of on first send so the
 	// upload can target the per-chat attachments folder.
 	const ensureChatIdHandler = async () => {
-		console.warn('[ensureChatId] called', {
-			chatId: $chatId,
-			temporaryChatEnabled: $temporaryChatEnabled
-		});
 		if ($temporaryChatEnabled || $chatId) return $chatId || null;
 		try {
 			const id = await initChatHandler(history);
-			console.warn('[ensureChatId] created chat:', id, 'store now:', $chatId);
 			return id || null;
 		} catch (e) {
 			console.error('Failed to create chat for file upload:', e);

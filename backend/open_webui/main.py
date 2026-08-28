@@ -1211,7 +1211,11 @@ async def chat_completion(
         #   absent → legacy caller, no chat management
         is_new_chat = 'parent_id' in form_data and form_data['parent_id'] is None and not form_data.get('chat_id')
         parent_id = form_data.pop('parent_id', None)
-        form_data.pop('new_chat', None)  # Legacy field
+        # The frontend pre-creates the chat before the first send when a file is
+        # attached (so terminal uploads can target the per-chat attachments folder).
+        # `new_chat` marks that first turn so initial title/tags generation still runs
+        # even though chat_id is already set.
+        is_first_turn_of_precreated_chat = bool(form_data.pop('new_chat', None))
 
         # Multi-model message_ids: list of {model_id, message_id} entries.
         # Supports both the new array format and legacy dict format for backward compat.
@@ -1299,7 +1303,7 @@ async def chat_completion(
             metadata['chat_id'] = str(uuid4())
 
         initial_title_generation = None
-        if is_new_chat and tasks and TASKS.TITLE_GENERATION in tasks:
+        if (is_new_chat or is_first_turn_of_precreated_chat) and tasks and TASKS.TITLE_GENERATION in tasks:
             initial_title_generation = tasks.pop(TASKS.TITLE_GENERATION)
 
         if metadata.get('chat_id') and user:

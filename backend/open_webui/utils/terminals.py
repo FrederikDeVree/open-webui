@@ -162,12 +162,15 @@ async def delete_terminal_chat_attachments(connection: dict, chat_id: str, user_
                 return
 
             attachments_path = f'{home.rstrip("/")}/chat_attachments/{chat_id}'
+            log.info('Deleting terminal attachments for chat %s: %s', chat_id, attachments_path)
             async with session.request(
                 'DELETE',
                 f'{base_url}/files/delete?path={quote(attachments_path, safe="")}',
                 headers=headers,
                 ssl=AIOHTTP_CLIENT_SESSION_SSL,
             ) as resp:
+                if resp.status < 400:
+                    log.info('Deleted terminal attachments for chat %s: %s', chat_id, attachments_path)
                 if resp.status >= 500:
                     body = await resp.text()
                     log.warning(

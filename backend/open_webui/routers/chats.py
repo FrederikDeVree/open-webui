@@ -1618,22 +1618,25 @@ async def delete_chat_by_id(
 
     # Best-effort cleanup of per-chat terminal attachment folders
     # (<home>/chat_attachments/<chat_id>/). Never blocks chat deletion.
+    # The folder path is deterministic per chat, so when the history doesn't
+    # reference a specific terminal (meta not persisted), fall back to trying
+    # every accessible terminal — a 404 delete is expected and harmless.
     try:
-        if terminal_ids:
-            connections = await Config.get('terminal_server.connections', []) or []
-            user_group_ids = {group.id for group in await Groups.get_groups_by_member_id(user.id)}
-
-            async def _cleanup(terminal_id: str, chat_id: str):
-                connection = next((c for c in connections if c.get('id') == terminal_id), None)
-                if not connection or not connection.get('enabled', True):
-                    return
-                if not await has_connection_access(user, connection, user_group_ids):
-                    return
-                await delete_terminal_chat_attachments(connection, chat_id, user.id)
-
+        connections = await Config.get('terminal_server.connections', []) or []
+        user_group_ids = {group.id for group in await Groups.get_groups_by_member_id(user.id)}
+        eligible = [
+            c
+            for c in connections
+            if c.get('enabled', True) and await has_connection_access(user, c, user_group_ids)
+        ]
+        targets = [c for c in eligible if c.get('id') in terminal_ids] if terminal_ids else eligible
+        if targets:
             await asyncio.gather(
-                *(_cleanup(tid, id) for tid in terminal_ids),
-                *(_cleanup(tid, child_id) for tid in terminal_ids for child_id in child_ids),
+                *(
+                    delete_terminal_chat_attachments(connection, chat_id, user.id)
+                    for connection in targets
+                    for chat_id in [id, *child_ids]
+                ),
                 return_exceptions=True,
             )
     except Exception as e:
