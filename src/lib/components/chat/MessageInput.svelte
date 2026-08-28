@@ -966,12 +966,15 @@
 					const baseDir = cwdInfo?.home || cwdDir;
 					uploadDir = `${baseDir.replace(/\/+$/, '')}/chat_attachments/${chatId}`;
 					// Best effort: ignore failures (the folder may already exist).
-					await createDirectory(
+					const createdDir = await createDirectory(
 						filesystemUploadTerminal.url,
 						filesystemUploadTerminal.key,
 						uploadDir,
 						chatId || undefined
 					);
+					if (!createdDir) {
+						console.warn('createDirectory failed for', uploadDir, '(may already exist)');
+					}
 				}
 				let uploadedFile = await uploadToTerminal(
 					filesystemUploadTerminal.url,
@@ -983,6 +986,9 @@
 				// If the per-chat folder upload failed (e.g. mkdir unsupported),
 				// fall back to the terminal's cwd.
 				if (!uploadedFile && uploadDir !== cwdDir) {
+					console.warn(
+						`Terminal upload to ${uploadDir} failed; falling back to ${cwdDir}`
+					);
 					uploadedFile = await uploadToTerminal(
 						filesystemUploadTerminal.url,
 						filesystemUploadTerminal.key,
