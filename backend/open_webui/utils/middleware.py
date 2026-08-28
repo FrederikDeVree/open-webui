@@ -252,6 +252,31 @@ def output_id(prefix: str) -> str:
     return f'{prefix}_{uuid4().hex[:24]}'
 
 
+def _maybe_inline_terminal_display_file(name: str, params: dict, tool: dict | None, user) -> dict:
+    """Inject ``inline=True`` into a terminal ``display_file`` call when the user's
+    ``terminalFileDisplay`` setting is ``'inline'`` and the model did not specify
+    ``inline`` itself.
+
+    Direct (user-configured) terminals get this behavior in the frontend
+    (``defaultInline`` in ``+layout.svelte``). System (admin-configured) terminals
+    are executed in the backend, so they never reach that gate — this helper gives
+    them the same behavior so the Inline setting works for both.
+    """
+    if name != 'display_file' or (tool or {}).get('type') != 'terminal':
+        return params
+    if params.get('inline') is not None:
+        return params  # model explicitly chose inline / not-inline; respect it
+    try:
+        settings = getattr(user, 'settings', None) or {}
+    except Exception:
+        settings = {}
+    if settings.get('terminalFileDisplay') == 'inline':
+        new_params = dict(params)
+        new_params['inline'] = True
+        return new_params
+    return params
+
+
 def build_terminal_file_tool_result(
     tool_function_name: str,
     tool_function_params: dict,
@@ -1659,6 +1684,9 @@ async def chat_completion_tools_handler(
                     tool_function_params = {
                         k: v for k, v in tool_function_params.items() if k in allowed_params
                     }
+                    tool_function_params = _maybe_inline_terminal_display_file(
+                        tool_function_name, tool_function_params, tool, user
+                    )
 
                     if tool.get('direct', False):
                         tool_result = await event_caller(
@@ -3560,6 +3588,7 @@ async def execute_tool_call_for_output(request, form_data, user, metadata, event
     direct_tool = tool.get('direct', False)
     allowed_params = spec.get('parameters', {}).get('properties', {}).keys()
     params = {key: value for key, value in params.items() if key in allowed_params}
+    params = _maybe_inline_terminal_display_file(name, params, tool, user)
 
     try:
         if direct_tool:
@@ -6085,6 +6114,7 @@ async def streaming_chat_response_handler(response, ctx):
                         direct_tool = tool.get('direct', False)
                         allowed_params = spec.get('parameters', {}).get('properties', {}).keys()
                         params = {key: value for key, value in params.items() if key in allowed_params}
+                        params = _maybe_inline_terminal_display_file(name, params, tool, user)
                         try:
                             if direct_tool:
                                 result = await event_caller(
