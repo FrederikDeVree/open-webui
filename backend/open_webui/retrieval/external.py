@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import threading
 import time
 from typing import Any, Optional
 
@@ -12,6 +13,46 @@ log = logging.getLogger(__name__)
 
 EXTERNAL_KNOWLEDGE_CONNECTIONS_CONFIG_KEY = 'external_knowledge.connections'
 IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+# fastembed BM25 model used to build sparse query vectors for external Qdrant
+# hybrid search. BM25 is inference-free (token hashing), so loading is cheap and
+# deterministic. The external Qdrant collection must already contain a named
+# sparse vector built with this same model/tokenizer for hybrid search to work.
+#
+# Alignment with the indexing side: keep BOTH sides on fastembed Bm25 defaults
+# (language="english", k=1.2, b=0.75, avg_len=256.0) and pin the SAME fastembed
+# major version (see fastembed==0.7.4 in pyproject.toml [all] /
+# backend/requirements.txt) so tokenizer behavior stays identical. Only the
+# tokenizer (language/stemmer/token_max_length) must actually match — k/b/avg_len
+# only shape the stored document weights on the indexing side; the query side
+# hashes tokens with weight 1.0 and never uses them.
+_BM25_MODEL_NAME = 'Qdrant/bm25'
+_bm25_model = None
+_bm25_model_lock = threading.Lock()
+
+
+def _get_bm25_model():
+    """Lazily load and cache the fastembed BM25 sparse embedding model."""
+    global _bm25_model
+    if _bm25_model is None:
+        with _bm25_model_lock:
+            if _bm25_model is None:
+                try:
+                    from fastembed import SparseTextEmbedding
+                except ImportError as exc:
+                    raise RuntimeError(
+                        'fastembed is not installed. Install it to use external Qdrant hybrid (BM25) search.'
+                    ) from exc
+                _bm25_model = SparseTextEmbedding(_BM25_MODEL_NAME)
+    return _bm25_model
+
+
+def _bm25_sparse_vector(query: str):
+    """Build a Qdrant SparseVector for the query using fastembed BM25."""
+    from qdrant_client import models
+
+    sparse = next(_get_bm25_model().query_embed(query))
+    return models.SparseVector(indices=[int(i) for i in sparse.indices], values=[float(v) for v in sparse.values])
 
 
 async def _get_external_connection(connection_id: str) -> Optional[dict]:
@@ -103,6 +144,7 @@ async def _retrieve_qdrant(connection, auth_config, knowledge, query, count, emb
         raise RuntimeError('External source collection is not configured')
     source_config = _source_config(knowledge)
     vector_field = source_config.get('vector_field') or None
+    sparse_field = source_config.get('sparse_field') or None
 
     vector = await embedding_function(query, prefix=RAG_EMBEDDING_QUERY_PREFIX)
 
@@ -112,6 +154,31 @@ async def _retrieve_qdrant(connection, auth_config, knowledge, query, count, emb
             api_key=(auth_config or {}).get('api_key'),
             timeout=config.get('timeout') or 30,
         )
+        if sparse_field:
+            # Hybrid search: dense + BM25 sparse, fused via RRF.
+            # Both prefetches share a generous candidate depth so fusion can
+            # recover documents that rank low in one retriever but high in the other.
+            prefetch_limit = max(count * 10, 100)
+            from qdrant_client import models
+
+            prefetches = [
+                models.Prefetch(
+                    query=vector,
+                    using=vector_field,
+                    limit=prefetch_limit,
+                ),
+                models.Prefetch(
+                    query=_bm25_sparse_vector(query),
+                    using=sparse_field,
+                    limit=prefetch_limit,
+                ),
+            ]
+            return client.query_points(
+                collection_name=collection_name,
+                prefetch=prefetches,
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
+                limit=count,
+            )
         return client.query_points(
             collection_name=collection_name,
             query=vector,

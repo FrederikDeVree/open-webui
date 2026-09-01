@@ -256,7 +256,37 @@ Global config to default file attachments to full-context mode.
 - `backend/open_webui/retrieval/utils.py`, `backend/open_webui/routers/retrieval.py` — `request.state.embedding_cache`
 	to avoid redundant embedding generation within a request (passed as `cache=` to the embed call).
 
-### 10. Misc local fixes
+### 10. External Qdrant hybrid search (dense + BM25 sparse via fastembed) (user feature)
+Let an **external Qdrant knowledge base** do hybrid search: dense vector + BM25 sparse, fused in Qdrant via RRF.
+The external collection is **pre-existing** (managed outside Open WebUI) and must **already contain a named
+sparse (BM25) vector** built with the same fastembed tokenizer (`Qdrant/bm25`) for hybrid search to work.
+Opt-in per source via a `sparse_field` config key; if unset, retrieval is unchanged (dense-only).
+- `backend/open_webui/retrieval/external.py` — `_get_bm25_model()` (lazy cached `SparseTextEmbedding('Qdrant/bm25')`),
+	`_bm25_sparse_vector(query)` → `models.SparseVector`, and `_retrieve_qdrant` builds a hybrid `query_points`
+	(two `models.Prefetch`: dense `using=vector_field` + sparse `using=sparse_field`, each `limit=max(count*10,100)`,
+	fused with `models.FusionQuery(fusion=models.Fusion.RRF)`). RRF fused scores are small positive values (not cosine
+	`[0,1]`); no threshold is applied in the external path so no normalization is needed.
+- `backend/open_webui/routers/knowledge.py` — `_get_normalized_external_source` adds `sparse_field` to `allowed_keys`
+	for the `qdrant` provider (optional).
+- `src/lib/components/admin/Settings/ExternalKnowledge.svelte` — `sparseField` form field (qdrant-only input + tooltip),
+	wired into `sourceForm`/`schemaDefaults`/`openEditSource`/`sourcePayload`.
+- `src/lib/i18n/locales/en-US/translation.json` — "Sparse (BM25) Field" + tooltip string.
+- **Dependency:** `fastembed==0.7.4` added to `pyproject.toml` `[all]` (next to `qdrant-client`) and
+	`backend/requirements.txt`. fastembed requires `pillow<12.0` (py3.10–3.13), so installing `[all]` downgrades the
+	base `pillow==12.2.0` pin to 11.x (the project's basic PIL usage — `Image`/`ImageOps` — is unaffected). The base
+	install (without `[all]`) keeps pillow 12.2.0. fastembed is lazy-imported only when hybrid search is enabled.
+- **Indexing-side alignment (critical):** the sparse vector in the external collection is built by a separate
+	indexing pipeline (outside this repo). Keep **both sides on fastembed `Bm25` defaults**
+	(`language="english"`, `k=1.2`, `b=0.75`, `avg_len=256.0`) and **pin the same fastembed major version** on both
+	sides so the tokenizer stays identical. Only the tokenizer (`language`/stemmer/`token_max_length`) must actually
+	match — `k`/`b`/`avg_len` only shape the stored document weights on the indexing side; the query side hashes tokens
+	with weight 1.0 and never uses them. `SparseTextEmbedding('Qdrant/bm25')` wraps a `Bm25` with exactly these
+	defaults (verified in fastembed 0.7.4). If the indexing side is ever upgraded, re-verify the tokenizer matches.
+- **Status:** local-only; preserve on the next upstream merge. **Verify after a merge** (quick greps):
+	`_bm25_sparse_vector` + `sparse_field` in `external.py`; `sparse_field` in `knowledge.py`; `sparseField` in
+	`ExternalKnowledge.svelte`; `fastembed==0.7.4` in `pyproject.toml` + `requirements.txt`.
+
+### 11. Misc local fixes
 - `src/lib/components/layout/ChatsModal.svelte` — use `copyToClipboard` utility instead of `navigator.clipboard`.
 - `Dockerfile` — increase Node.js heap size to avoid OOM during build.
 - `docker-compose.dev-arvoo.yaml` — dev-specific postgres + volumes, vector DB, login form enabled in dev, port fixes.
@@ -271,7 +301,7 @@ Global config to default file attachments to full-context mode.
 	`Chat.svelte` (upstream moved it; a new copy using `getUsageTokenCount` sits just below the old location), and all px→rem unit
 	conversions (upstream's "Interface scaling" work).
 - **Drop** local test deps `moto[s3]`, `docker`, `pytest`, `pytest-docker` from `pyproject.toml` `[all]` and `uv.lock`.
-- **Keep** local: items 1 (clickable terminal paths + FileNav home-path + terminal proxy), 3, 4, 5, 6, 7, 8, 9, 10.
+- **Keep** local: items 1 (clickable terminal paths + FileNav home-path + terminal proxy), 3, 4, 5, 6, 7, 8, 9, 10, 11.
 
 ### Merge mechanics (gotchas for the next upstream merge)
 - **`git checkout --theirs <many paths>` is atomic**: if even one path has no "theirs" stage (e.g. a delete/modify `UD` conflict),

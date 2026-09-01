@@ -597,6 +597,9 @@ def _get_normalized_external_source(source: ExternalKnowledgeSourceForm, provide
     allowed_keys = {'content_field', 'metadata_field', 'document_id_field'}
     if provider in {'qdrant', 'milvus'}:
         allowed_keys.add('vector_field')
+    if provider == 'qdrant':
+        # Optional named sparse (BM25) vector field for hybrid search.
+        allowed_keys.add('sparse_field')
     if provider == 'pgvector':
         allowed_keys.update({'table_name', 'collection_field', 'vector_field'})
 

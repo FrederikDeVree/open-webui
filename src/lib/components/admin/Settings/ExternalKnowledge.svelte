@@ -80,6 +80,7 @@
 		sourceName: '',
 		contentField: 'payload.text',
 		vectorField: '',
+		sparseField: '',
 		metadataField: 'payload.metadata',
 		documentIdField: 'id',
 		tableName: 'document_chunk',
@@ -111,6 +112,7 @@
 		return {
 			contentField: 'payload.text',
 			vectorField: '',
+			sparseField: '',
 			metadataField: 'payload.metadata',
 			documentIdField: 'id',
 			tableName: 'document_chunk',
@@ -168,6 +170,7 @@
 			testQuery: '',
 			contentField: sourceConfig.content_field ?? defaults.contentField,
 			vectorField: sourceConfig.vector_field ?? defaults.vectorField,
+			sparseField: sourceConfig.sparse_field ?? defaults.sparseField ?? '',
 			metadataField: sourceConfig.metadata_field ?? defaults.metadataField,
 			documentIdField: sourceConfig.document_id_field ?? defaults.documentIdField,
 			tableName: sourceConfig.table_name ?? defaults.tableName,
@@ -240,6 +243,9 @@
 		const config: Record<string, string> = {
 			content_field: sourceForm.contentField.trim(),
 			...(sourceForm.vectorField.trim() ? { vector_field: sourceForm.vectorField.trim() } : {}),
+			...(sourceForm.provider === 'qdrant' && sourceForm.sparseField.trim()
+				? { sparse_field: sourceForm.sparseField.trim() }
+				: {}),
 			...(sourceForm.metadataField.trim()
 				? { metadata_field: sourceForm.metadataField.trim() }
 				: {}),
@@ -666,6 +672,47 @@
 								</div>
 							</div>
 						</div>
+
+						{#if sourceForm.provider === 'qdrant'}
+							<div class="flex gap-2 mt-2">
+								<div class="flex flex-col w-full">
+									<div class="flex justify-between mb-0.5">
+										<label class="text-xs text-gray-500" for="external-source-sparse-field"
+											>{$i18n.t('Sparse (BM25) Field')}</label
+										>
+									</div>
+									<div class="flex flex-1 items-center">
+										<input
+											id="external-source-sparse-field"
+											class="w-full text-sm bg-transparent outline-hidden placeholder:text-gray-300 dark:placeholder:text-gray-700"
+											bind:value={sourceForm.sparseField}
+											on:input={markUntested}
+											placeholder={$i18n.t('Optional')}
+										/>
+										<Tooltip
+											content={$i18n.t(
+												'Name of the sparse (BM25) vector field for hybrid search. Leave empty for dense-only. The collection must already contain this sparse vector, built with fastembed Qdrant/bm25.'
+											)}
+											className="shrink-0 flex items-center ml-1"
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												viewBox="0 0 20 20"
+												fill="currentColor"
+												class="w-4 h-4 text-gray-400"
+												aria-hidden="true"
+											>
+												<path
+													fill-rule="evenodd"
+													d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-4a1 1 0 100 2 1 1 0 000-2zm-1 4a1 1 0 112 0v3a1 1 0 11-2 0v-3z"
+													clip-rule="evenodd"
+												/>
+											</svg>
+										</Tooltip>
+									</div>
+								</div>
+							</div>
+						{/if}
 
 						<div class="flex gap-2 mt-2">
 							<div class="flex flex-col flex-1">

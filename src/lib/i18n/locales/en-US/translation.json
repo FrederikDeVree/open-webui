@@ -2501,6 +2501,8 @@
 	"Sets the stop sequences to use. When this pattern is encountered, the LLM will stop generating text and return. Multiple stop patterns may be set by specifying multiple separate stop parameters in a modelfile.": "",
 	"Setting": "",
 	"Settings": "",
+	"Sparse (BM25) Field": "",
+	"Name of the sparse (BM25) vector field for hybrid search. Leave empty for dense-only. The collection must already contain this sparse vector, built with fastembed Qdrant/bm25.": "",
 	"settings configured": "",
 	"Settings Permissions": "",
 	"Settings saved successfully!": "",
