@@ -100,7 +100,7 @@ dependencies = [
     "soundfile==0.13.1",
     "azure-ai-documentintelligence==1.0.2",
 
-    "pillow==12.2.0",
+    "pillow>=10.3.0,<12.0", # capped <12.0: fastembed (external Qdrant BM25 hybrid search) requires pillow<12.0 on py3.10-3.13; project only uses Image/ImageOps
     "opencv-python-headless==4.13.0.92",
     "rapidocr==3.9.2",
     "rank-bm25==0.2.2",
@@ -160,7 +160,7 @@ all = [
     "elasticsearch==9.4.1",
 
     "qdrant-client==1.18.0",
-    "fastembed==0.7.4", # BM25 sparse vectors for external Qdrant hybrid search; requires pillow<12.0 (downgrades the base pillow pin when [all] is installed)
+    "fastembed==0.7.4", # BM25 sparse vectors for external Qdrant hybrid search
 
     "weaviate-client==4.20.3",
     "pymilvus==2.6.14",

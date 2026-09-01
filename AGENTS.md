@@ -272,9 +272,10 @@ Opt-in per source via a `sparse_field` config key; if unset, retrieval is unchan
 	wired into `sourceForm`/`schemaDefaults`/`openEditSource`/`sourcePayload`.
 - `src/lib/i18n/locales/en-US/translation.json` — "Sparse (BM25) Field" + tooltip string.
 - **Dependency:** `fastembed==0.7.4` added to `pyproject.toml` `[all]` (next to `qdrant-client`) and
-	`backend/requirements.txt`. fastembed requires `pillow<12.0` (py3.10–3.13), so installing `[all]` downgrades the
-	base `pillow==12.2.0` pin to 11.x (the project's basic PIL usage — `Image`/`ImageOps` — is unaffected). The base
-	install (without `[all]`) keeps pillow 12.2.0. fastembed is lazy-imported only when hybrid search is enabled.
+	`backend/requirements.txt`. fastembed requires `pillow<12.0` (py3.10–3.13), so the pillow pin was relaxed from
+	`pillow==12.2.0` to `pillow>=10.3.0,<12.0` in **both** `pyproject.toml` (base deps) and `backend/requirements.txt`
+	(resolves to 11.3.0). The project's basic PIL usage (`Image`/`ImageOps`) is unaffected on 11.x. fastembed is
+	lazy-imported only when hybrid search is enabled.
 - **Indexing-side alignment (critical):** the sparse vector in the external collection is built by a separate
 	indexing pipeline (outside this repo). Keep **both sides on fastembed `Bm25` defaults**
 	(`language="english"`, `k=1.2`, `b=0.75`, `avg_len=256.0`) and **pin the same fastembed major version** on both
