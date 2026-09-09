@@ -30,6 +30,7 @@ from open_webui.env import (
     ENABLE_OPENAI_API_PASSTHROUGH,
     FORWARD_SESSION_INFO_HEADER_CHAT_ID,
     MODELS_CACHE_TTL,
+    REDIS_KEY_PREFIX,
 )
 from open_webui.events import EVENTS, publish_event, publish_model_provider_request_failed
 from open_webui.internal.db import get_async_session
@@ -76,6 +77,7 @@ log = logging.getLogger(__name__)
 _STRIP_PROXY_HEADERS = frozenset({'Content-Encoding', 'Content-Length', 'Transfer-Encoding'})
 _MODEL_LIST_TIMEOUT = aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST)
 _UNSUPPORTED_OPENAI_MODEL_KEYWORDS = ('babbage', 'dall-e', 'davinci', 'embedding', 'tts', 'whisper')
+BASE_MODELS_CACHE_KEY = f'{REDIS_KEY_PREFIX}:models:base'
 
 
 def _clean_proxy_headers(raw_headers) -> dict:
@@ -157,7 +159,7 @@ async def get_headers_and_cookies(
     metadata: dict | None = None,
     user: UserModel = None,
 ):
-    cookies = {}
+    cookies = getattr(request, 'cookies', {}) if config.get('forward_cookies', False) else {}
     headers = {
         'Content-Type': 'application/json',
         **(
@@ -187,11 +189,8 @@ async def get_headers_and_cookies(
     elif auth_type == 'none':
         token = None
     elif auth_type == 'session':
-        cookies = request.cookies
         token = request.state.token.credentials
     elif auth_type == 'system_oauth':
-        cookies = request.cookies
-
         oauth_token = None
         try:
             if request.cookies.get('oauth_session_id', None):
@@ -345,6 +344,9 @@ async def get_openai_connection(idx: int) -> tuple[str, str, dict]:
 
 async def clear_openai_model_cache(request: Request):
     await get_all_models.cache.clear()
+    redis = getattr(request.app.state, 'redis', None)
+    if redis is not None:
+        await redis.delete(BASE_MODELS_CACHE_KEY)
     request.app.state.BASE_MODELS = []
     request.app.state.OPENAI_MODELS = {}
     models = getattr(request.app.state, 'MODELS', None)
@@ -571,14 +573,7 @@ async def update_config(request: Request, form_data: OpenAIConfigForm, user=Depe
         }
     )
 
-    await get_all_models.cache.clear()
-    request.app.state.BASE_MODELS = []
-    request.app.state.OPENAI_MODELS = {}
-    models = getattr(request.app.state, 'MODELS', None)
-    if hasattr(models, 'clear'):
-        models.clear()
-    else:
-        request.app.state.MODELS = {}
+    await clear_openai_model_cache(request)
 
     await publish_event(
         request,
@@ -866,8 +861,11 @@ async def get_all_models(request: Request, user: UserModel) -> dict[str, list]:
 
 
 @router.get('/models')
-@router.get('/models/{url_idx}', dependencies=[Depends(get_admin_user)])
+@router.get('/models/{url_idx}')
 async def get_models(request: Request, url_idx: int | None = None, user=Depends(get_verified_user)):
+    if url_idx is not None and user.role != 'admin':
+        raise HTTPException(status_code=401, detail=ERROR_MESSAGES.ACCESS_PROHIBITED)
+
     if not await Config.get('openai.enable'):
         raise HTTPException(status_code=503, detail='OpenAI API is disabled')
 
@@ -1567,6 +1565,20 @@ async def generate_chat_completion(
     headers, cookies = await get_headers_and_cookies(request, url, key, api_config, metadata, user=user)
 
     is_responses = api_config.get('api_type') == 'responses'
+
+    # Explicit continuation keeps llama.cpp from echoing the prefill in streamed replies.
+    if (
+        api_config.get('provider') == 'llama.cpp'
+        # These flags apply to Chat Completions, not the Responses API.
+        and not is_responses
+        # The frontend sends this ID when the user clicks Continue.
+        and (metadata or {}).get('assistant_message_id')
+        # Tool follow-ups retain the metadata but must start a new assistant turn.
+        and payload.get('messages')
+        and payload['messages'][-1].get('role') == 'assistant'
+    ):
+        payload['continue_final_message'] = True
+        payload['add_generation_prompt'] = False
 
     if api_config.get('azure') or api_config.get('provider') == 'azure':
         # Only set api-key header if not using Azure Entra ID authentication

@@ -18,6 +18,7 @@ from authlib.integrations.starlette_client import OAuth
 from pydantic import BaseModel
 
 from open_webui.env import (
+    USE_SLIM,
     DATA_DIR,
     DATABASE_URL,
     ENABLE_ADMIN_CHAT_ACCESS,
@@ -75,6 +76,7 @@ def run_migrations():
         command.upgrade(alembic_cfg, 'head')
     except Exception as e:
         log.exception(f'Error running migrations: {e}')
+        raise
 
 
 if ENABLE_DB_MIGRATIONS:
@@ -513,12 +515,12 @@ CODE_INTERPRETER_PYODIDE_PROMPT = """
 # Vector Database
 ####################################
 
-VECTOR_DB = os.getenv('VECTOR_DB', 'chroma')
+VECTOR_DB = os.getenv('VECTOR_DB', 'pgvector' if USE_SLIM else 'chroma')
 
 # Chroma
 CHROMA_DATA_PATH = f'{DATA_DIR}/vector_db'
 
-if VECTOR_DB == 'chroma':
+if VECTOR_DB == 'chroma' and not USE_SLIM:
     import chromadb
 
     CHROMA_TENANT = os.getenv('CHROMA_TENANT', chromadb.DEFAULT_TENANT)
@@ -665,7 +667,7 @@ SSL_ASSERT_FINGERPRINT = os.getenv('SSL_ASSERT_FINGERPRINT', None)
 ELASTICSEARCH_INDEX_PREFIX = os.getenv('ELASTICSEARCH_INDEX_PREFIX', 'open_webui_collections')
 # Pgvector
 PGVECTOR_DB_URL = os.getenv('PGVECTOR_DB_URL', DATABASE_URL)
-if VECTOR_DB == 'pgvector' and not PGVECTOR_DB_URL.startswith('postgres'):
+if not USE_SLIM and VECTOR_DB == 'pgvector' and not PGVECTOR_DB_URL.startswith('postgres'):
     raise ValueError(
         'Pgvector requires setting PGVECTOR_DB_URL or using Postgres with vector extension as the primary database.'
     )
@@ -832,7 +834,7 @@ ORACLE_DB_POOL_MAX = int(os.getenv('ORACLE_DB_POOL_MAX', 10))
 ORACLE_DB_POOL_INCREMENT = int(os.getenv('ORACLE_DB_POOL_INCREMENT', 1))
 
 
-if VECTOR_DB == 'oracle23ai':
+if not USE_SLIM and VECTOR_DB == 'oracle23ai':
     if not ORACLE_DB_USER or not ORACLE_DB_PASSWORD or not ORACLE_DB_DSN:
         raise ValueError(
             'Oracle23ai requires setting ORACLE_DB_USER, ORACLE_DB_PASSWORD, and ORACLE_DB_DSN.'
@@ -1332,6 +1334,9 @@ AZURE_AI_SEARCH_ENDPOINT = os.getenv('AZURE_AI_SEARCH_ENDPOINT', '')
 AZURE_AI_SEARCH_INDEX_NAME = os.getenv('AZURE_AI_SEARCH_INDEX_NAME', '')
 
 EXA_API_KEY = os.getenv('EXA_API_KEY', '')
+EXA_MAX_CONTENT_LENGTH = int(os.environ['EXA_MAX_CONTENT_LENGTH']) if os.getenv('EXA_MAX_CONTENT_LENGTH') else None
+if EXA_MAX_CONTENT_LENGTH is not None and EXA_MAX_CONTENT_LENGTH <= 0:
+    raise ValueError('EXA_MAX_CONTENT_LENGTH must be a positive integer or unset')
 
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY', '')
 
@@ -1779,6 +1784,7 @@ if default_prompt_suggestions == []:
     ]
 
 DEFAULT_PROMPT_SUGGESTIONS = default_prompt_suggestions
+DEFAULT_PROMPT_SUGGESTIONS_I18N = {}
 
 try:
     model_order_list = JSONCodec.loads(os.getenv('MODEL_ORDER_LIST', '[]'))
@@ -2293,6 +2299,7 @@ else:
 
 
 class BannerModel(BaseModel):
+    i18n: dict[str, dict[str, str]] | None = None
     id: str
     type: str
     title: str | None = None
@@ -3168,6 +3175,7 @@ DEFAULT_CONFIG = {
     'web.search.azure_ai_search_endpoint': AZURE_AI_SEARCH_ENDPOINT,
     'web.search.azure_ai_search_index_name': AZURE_AI_SEARCH_INDEX_NAME,
     'web.search.exa_api_key': EXA_API_KEY,
+    'web.search.exa_max_content_length': EXA_MAX_CONTENT_LENGTH,
     'web.search.perplexity_api_key': PERPLEXITY_API_KEY,
     'web.search.perplexity_model': PERPLEXITY_MODEL,
     'web.search.perplexity_search_context_usage': PERPLEXITY_SEARCH_CONTEXT_USAGE,
@@ -3265,7 +3273,9 @@ DEFAULT_CONFIG = {
     'ui.default_models': DEFAULT_MODELS,
     'ui.default_pinned_models': DEFAULT_PINNED_MODELS,
     'ui.default_interface_settings': DEFAULT_INTERFACE_SETTINGS,
+    'ui.i18n': {},
     'ui.prompt_suggestions': DEFAULT_PROMPT_SUGGESTIONS,
+    'ui.prompt_suggestions_i18n': DEFAULT_PROMPT_SUGGESTIONS_I18N,
     'ui.model_order_list': MODEL_ORDER_LIST,
     'models.default_metadata': DEFAULT_MODEL_METADATA,
     'models.default_params': DEFAULT_MODEL_PARAMS,

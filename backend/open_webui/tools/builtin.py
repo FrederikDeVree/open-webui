@@ -391,11 +391,16 @@ async def generate_image(
         images = await image_generations(
             request=__request__,
             form_data=CreateImageForm(prompt=prompt),
+            metadata=(
+                {'channel_id': __chat_id__.removeprefix('channel:'), 'message_id': __message_id__}
+                if isinstance(__chat_id__, str) and __chat_id__.startswith('channel:')
+                else None
+            ),
             user=user,
         )
 
         # Prepare file entries for the images
-        image_files = [{'type': 'image', 'url': img['url']} for img in images]
+        image_files = [{'type': 'image', **img} for img in images]
 
         # Persist files to DB if chat context is available
         if is_saved_chat_id(__chat_id__) and __message_id__ and images:
@@ -459,11 +464,16 @@ async def edit_image(
         images = await image_edits(
             request=__request__,
             form_data=EditImageForm(prompt=prompt, image=image_urls),
+            metadata=(
+                {'channel_id': __chat_id__.removeprefix('channel:'), 'message_id': __message_id__}
+                if isinstance(__chat_id__, str) and __chat_id__.startswith('channel:')
+                else None
+            ),
             user=user,
         )
 
         # Prepare file entries for the images
-        image_files = [{'type': 'image', 'url': img['url']} for img in images]
+        image_files = [{'type': 'image', **img} for img in images]
 
         # Persist files to DB if chat context is available
         if is_saved_chat_id(__chat_id__) and __message_id__ and images:
@@ -2571,7 +2581,7 @@ async def grep_chat_files(
         if not files_to_search:
             return JSONCodec.dumps({'error': 'No accessible files found'})
 
-        return _grep_file_models(files_to_search, pattern, case_insensitive, count_only)
+        return await asyncio.to_thread(_grep_file_models, files_to_search, pattern, case_insensitive, count_only)
     except Exception as e:
         log.exception(f'grep_chat_files error: {e}')
         return JSONCodec.dumps({'error': str(e)})
@@ -2809,7 +2819,7 @@ async def grep_knowledge_files(
         if not files_to_search:
             return JSONCodec.dumps({'error': 'No accessible files found'})
 
-        return _grep_file_models(files_to_search, pattern, case_insensitive, count_only)
+        return await asyncio.to_thread(_grep_file_models, files_to_search, pattern, case_insensitive, count_only)
 
     except Exception as e:
         log.exception(f'grep_knowledge_files error: {e}')

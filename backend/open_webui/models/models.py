@@ -80,6 +80,7 @@ class ModelMeta(BaseModel):
 
     profile_image_url: str | None = None
     description: str | None = Field(default=None, description='User-facing description of the model.')
+    i18n: dict[str, Any] | None = None
     capabilities: dict | None = None
     knowledge: list[Any] | None = None
 
@@ -180,7 +181,7 @@ class ModelForm(BaseModel):
     name: str
     meta: ModelMeta
     params: ModelParams
-    access_grants: list[dict | None] = None
+    access_grants: list[dict] | None = None
     is_active: bool = True
 
 
@@ -191,7 +192,7 @@ class ModelsTable:
     async def _to_model_model(
         self,
         model: Model,
-        access_grants: list[AccessGrantModel | None] = None,
+        access_grants: list[AccessGrantModel] | None = None,
         db: AsyncSession | None = None,
     ) -> ModelModel:
         if isinstance(model.meta, dict):
@@ -470,11 +471,13 @@ class ModelsTable:
 
             return ModelListResponse(items=models, total=total)
 
-    async def get_model_meta_by_id(self, id: str, db: AsyncSession | None = None) -> tuple[dict, int | None]:
-        """Return (meta, updated_at) for a model, skipping access grant resolution."""
+    async def get_model_meta_by_id(
+        self, id: str, db: AsyncSession | None = None
+    ) -> tuple[dict, str, int | None] | None:
+        """Return (meta, user_id, updated_at) for a model, skipping access grant resolution."""
         try:
             async with get_async_db_context(db) as db:
-                result = await db.execute(select(Model.meta, Model.updated_at).filter_by(id=id))
+                result = await db.execute(select(Model.meta, Model.user_id, Model.updated_at).filter_by(id=id))
                 return result.first()
         except Exception:
             return None

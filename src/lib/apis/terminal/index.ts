@@ -62,6 +62,63 @@ export type TerminalCwd = {
 
 import { WEBUI_API_BASE_URL } from '$lib/constants';
 
+export type TerminalConnection = {
+	selector: string;
+	baseUrl: string;
+	key: string;
+	system: boolean;
+};
+export type TerminalProcess = {
+	id: string;
+	command: string;
+	status: 'running' | 'done' | 'killed';
+	exit_code: number | null;
+};
+export type TerminalProcessOutput = TerminalProcess & {
+	output: { type: string; data: string }[];
+	next_offset: number;
+	truncated: boolean;
+};
+
+export const resolveTerminalConnection = (
+	selector: string | null,
+	servers: any[],
+	directServers: any[],
+	token: string
+): TerminalConnection | null => {
+	if (!selector) return null;
+	if (servers.some((server) => server.id === selector)) {
+		return {
+			selector,
+			baseUrl: `${WEBUI_API_BASE_URL}/terminals/${encodeURIComponent(selector)}`,
+			key: token,
+			system: true
+		};
+	}
+	const direct = directServers.find((server) => server.url === selector);
+	return direct
+		? { selector, baseUrl: direct.url.replace(/\/$/, ''), key: direct.key ?? '', system: false }
+		: null;
+};
+
+export const terminalRequest = async <T>(
+	connection: TerminalConnection,
+	chatId: string | null,
+	path: string,
+	options: RequestInit = {}
+): Promise<T> => {
+	const response = await fetch(`${connection.baseUrl}${path}`, {
+		...options,
+		headers: {
+			Authorization: `Bearer ${connection.key.trim()}`,
+			...(chatId ? { 'X-Session-Id': chatId } : {}),
+			...options.headers
+		}
+	});
+	if (!response.ok) throw new Error(`Terminal request failed (${response.status})`);
+	return response.json();
+};
+
 const bearerHeaders = (apiKey: string): Record<string, string> => ({
 	Authorization: `Bearer ${apiKey.trim()}`
 });
@@ -287,6 +344,29 @@ export const downloadFileBlob = async (
 	if (!res || !res.ok) return null;
 
 	const filename = path.split('/').pop() ?? 'file';
+	const blob = await res.blob().catch(() => null);
+	if (!blob) return null;
+	return { blob, filename };
+};
+
+export const downloadFilePreview = async (
+	baseUrl: string,
+	apiKey: string,
+	path: string,
+	sessionId?: string
+): Promise<{ blob: Blob; filename: string } | null> => {
+	const url = `${baseUrl.replace(/\/$/, '')}/files/view?path=${encodeURIComponent(path)}&preview=true`;
+	const headers: Record<string, string> = bearerHeaders(apiKey);
+	if (sessionId) headers['X-Session-Id'] = sessionId;
+	const res = await fetch(url, { headers }).catch(() => null);
+
+	if (!res) return null;
+	if (!res.ok) return null;
+
+	const contentType = res.headers.get('content-type') ?? '';
+	const filename = path.split('/').pop() ?? 'file';
+	if (!contentType.includes('application/pdf')) return null;
+
 	const blob = await res.blob().catch(() => null);
 	if (!blob) return null;
 	return { blob, filename };
@@ -553,4 +633,60 @@ export const stopNotebookSession = async (
 		headers: bearerHeaders(apiKey)
 	}).catch(() => null);
 	return res?.ok ?? false;
+};
+
+export type TerminalDiffLine = {
+	type: 'added' | 'removed' | 'context';
+	oldNumber: number | null;
+	newNumber: number | null;
+	content: string;
+	revisedContent?: string;
+	segments: { text: string; changed: boolean }[];
+};
+export type TerminalComparisonRequest = {
+	original: string;
+	revised: string;
+	ignore_whitespace: boolean;
+};
+export type TerminalComparison = {
+	original: { name: string; path: string; notices: string[] };
+	revised: { name: string; path: string; notices: string[] };
+	additions: number;
+	deletions: number;
+	hunks: { header: string; lines: TerminalDiffLine[] }[];
+};
+
+export const compareFiles = async (
+	baseUrl: string,
+	apiKey: string,
+	request: TerminalComparisonRequest,
+	sessionId?: string,
+	signal?: AbortSignal
+): Promise<TerminalComparison> => {
+	const response = await fetch(`${baseUrl.replace(/\/$/, '')}/files/compare`, {
+		method: 'POST',
+		signal,
+		headers: {
+			...bearerHeaders(apiKey),
+			'Content-Type': 'application/json',
+			...(sessionId ? { 'X-Session-Id': sessionId } : {})
+		},
+		body: JSON.stringify(request)
+	});
+	const body = await response.json().catch(() => null);
+	if (
+		response.status === 405 ||
+		(response.status === 404 && ((!body?.detail && !body?.error) || body.detail === 'Not Found'))
+	) {
+		throw new Error(
+			'File comparison is not available on this terminal. Update Open Terminal to use Compare.'
+		);
+	}
+	if (!response.ok)
+		throw new Error(
+			typeof body?.detail === 'string'
+				? body.detail
+				: (body?.error ?? `Comparison failed (${response.status})`)
+		);
+	return body;
 };

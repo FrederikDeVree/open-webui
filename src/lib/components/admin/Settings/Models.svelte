@@ -5,7 +5,7 @@
 	const { saveAs } = fileSaver;
 
 	import { onMount, onDestroy, getContext, tick } from 'svelte';
-	const i18n = getContext('i18n');
+	const i18n: any = getContext('i18n');
 
 	import {
 		config,
@@ -102,7 +102,7 @@
 	let modelDefaultsPanel = null;
 	let modelDefaultsDirty = false;
 
-	let viewOption = ''; // '' = All, 'enabled', 'disabled', 'visible', 'hidden'
+	let viewOption = '';
 	let tags: string[] = [];
 	let selectedTag = '';
 
@@ -151,6 +151,8 @@
 		filteredModels = models
 			.filter((m) => searchValue === '' || m.name.toLowerCase().includes(searchValue.toLowerCase()))
 			.filter((m) => {
+				if (viewOption === 'base') return !isPresetModel(m);
+				if (viewOption === 'workspace') return isPresetModel(m);
 				if (viewOption === 'enabled') return m?.is_active ?? true;
 				if (viewOption === 'disabled') return !(m?.is_active ?? true);
 				if (viewOption === 'visible') return !(m?.meta?.hidden ?? false);
@@ -966,7 +968,7 @@
 											>
 												<img
 													src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model.id}&lang=${$i18n.language}`}
-													alt="modelfile profile"
+													alt={$i18n.t('modelfile profile')}
 													class=" rounded-xl size-7 object-cover"
 													loading="lazy"
 													decoding="async"

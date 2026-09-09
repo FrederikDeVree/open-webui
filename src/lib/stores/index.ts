@@ -4,6 +4,7 @@ import type { ModelConfig } from '$lib/apis';
 import type { Banner } from '$lib/types';
 import type { Socket } from 'socket.io-client';
 import type { AudioQueue } from '$lib/utils/audio';
+import type { I18nOverrides } from '$lib/utils/translationDictionary';
 
 import emojiShortCodes from '$lib/emoji-shortcodes.json';
 
@@ -232,6 +233,7 @@ type Settings = {
 	imageCompression?: boolean;
 	imageCompressionSize?: any;
 	textScale?: number;
+	fontFamily?: string | null;
 	widescreenMode?: null;
 	largeTextAsFile?: boolean;
 	promptAutocomplete?: boolean;
@@ -330,12 +332,15 @@ type Config = {
 	name: string;
 	version: string;
 	default_locale: string;
+	i18n?: I18nOverrides;
 	default_models: string;
 	default_pinned_models?: string | null;
 	default_prompt_suggestions: PromptSuggestion[];
 	RAG_FULL_CONTEXT?: boolean;
 	RAG_FILE_FULL_CONTEXT?: boolean;
+	default_prompt_suggestions_i18n?: Record<string, { suggestion_prompts: PromptSuggestion[] }>;
 	features: {
+		slim?: boolean;
 		auth: boolean;
 		auth_trusted_header: boolean;
 		enable_api_keys: boolean;

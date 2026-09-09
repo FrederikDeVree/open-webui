@@ -145,16 +145,14 @@ async def proxy_terminal(
             return JSONResponse({'error': 'A saved chat is required for this terminal'}, status_code=409)
         if context_id:
             headers[TERMINAL_CONTEXT_HEADER] = context_id
-    cookies = {}
+    cookies = getattr(request, 'cookies', {}) if connection.get('forward_cookies', False) else {}
     auth_type = connection.get('auth_type', 'bearer')
 
     if auth_type == 'bearer':
         headers.update(bearer_auth_header(connection.get('key', '')))
     elif auth_type == 'session':
-        cookies = request.cookies
         headers.update(bearer_auth_header(request.state.token.credentials))
     elif auth_type == 'system_oauth':
-        cookies = request.cookies
         # Resolve the token server-side from the caller's OAuth session; never trust a client header.
         oauth_token = None
         try:
@@ -326,7 +324,7 @@ async def ws_terminal(
     # For orchestrator-backed servers, pass user_id
     upstream_params['user_id'] = user.id
     context_id = terminal_context_id(connection, {'chat_id': chat_id}, 'chat')
-    upstream_headers = {}
+    upstream_headers = {'X-User-Id': user.id, 'X-Session-Id': chat_id}
     if terminal_context_config(connection, 'chat').get('context_id') == 'chat_id' and not context_id:
         await ws.close(code=4003, reason='A saved chat is required for this terminal')
         return
@@ -362,6 +360,8 @@ async def ws_terminal(
                 await upstream.send_str(_json.dumps({'type': 'auth', 'token': key}))
             elif auth_type == 'session' and is_terminal_orchestrator(connection):
                 await upstream.send_str(_json.dumps({'type': 'auth', 'token': token}))
+            else:
+                await upstream.send_str(_json.dumps({'type': 'auth', 'token': ''}))
 
             await publish_event(
                 app,

@@ -83,7 +83,7 @@ from open_webui.tasks import clear_response_stream, save_response_stream
 from open_webui.utils.access_control import has_connection_access, has_permission
 from open_webui.utils.access_control.files import get_owner_accessible_folder_files
 from open_webui.utils.access_control.folders import has_folder_access
-from open_webui.utils.ask_user import stage_ask_user_tool_call
+from open_webui.utils.ask_user import stage_ask_user_tool_calls
 from open_webui.utils.chat import generate_chat_completion
 from open_webui.utils.chat_id import is_saved_chat_id
 from open_webui.utils.code_interpreter import execute_code_jupyter
@@ -96,6 +96,7 @@ from open_webui.utils.files import (
 )
 from open_webui.utils.filter import (
     FilterContext,
+    get_filter_context,
     get_filter_functions,
     process_filter_functions,
 )
@@ -188,6 +189,12 @@ def _is_tool_result_error(value: Any) -> bool:
         )
 
     return False
+
+
+def normalize_messages_for_model(form_data: dict) -> dict:
+    form_data['messages'] = strip_empty_content_blocks(form_data.get('messages', []))
+    form_data['messages'] = merge_system_messages(form_data.get('messages', []))
+    return form_data
 
 
 async def publish_chat_finished_event(
@@ -293,12 +300,7 @@ def build_terminal_file_tool_result(
     if isinstance(tool_result, (list, tuple)) and tool_result and isinstance(tool_result[0], dict):
         tool_result = tool_result[0]
 
-    if (
-        tool_function_name != 'display_file'
-        or tool_function_params.get('inline') is not True
-        or not isinstance(tool_result, dict)
-        or tool_result.get('exists') is False
-    ):
+    if tool_function_name != 'display_file' or not isinstance(tool_result, dict) or tool_result.get('exists') is False:
         return None
 
     tool_id = (tool or {}).get('tool_id', '')
@@ -319,7 +321,7 @@ def build_terminal_file_tool_result(
         **tool_result,
         'type': 'file',
         'source': 'open_terminal',
-        'displayed': True,
+        **({'displayed': True} if tool_function_params.get('inline') is True else {}),
         'terminal_selector': terminal_selector,
         **({'terminal_id': terminal_id} if terminal_id else {}),
         **({'terminal_url': server_url} if server_url and not terminal_id else {}),
@@ -448,41 +450,10 @@ def get_citation_source_from_tool_result(
         if isinstance(tool_result, dict) and 'error' in tool_result:
             return []
 
-        # Validate tool_result type based on what the branch expects
-        if tool_name in _EXPECTS_LIST and not isinstance(tool_result, list):
-            return []
-        elif tool_name in _EXPECTS_DICT and not isinstance(tool_result, dict):
-            return []
+        if tool_name in ('view_knowledge_file', 'view_file'):
+            if not isinstance(tool_result, dict):
+                return []
 
-        if tool_name == 'search_web':
-            # Parse JSON array: [{"title": "...", "link": "...", "snippet": "..."}]
-            results = tool_result
-            documents = []
-            metadata = []
-
-            for result in results:
-                title = result.get('title', '')
-                link = result.get('link', '')
-                snippet = result.get('snippet', '')
-
-                documents.append(f'{title}\n{snippet}')
-                metadata.append(
-                    {
-                        'source': link,
-                        'name': title,
-                        'url': link,
-                    }
-                )
-
-            return [
-                {
-                    'source': {'name': 'search_web', 'id': 'search_web'},
-                    'document': documents,
-                    'metadata': metadata,
-                }
-            ]
-
-        elif tool_name in ('view_knowledge_file', 'view_file'):
             file_data = tool_result
             filename = file_data.get('filename', 'Unknown File')
             file_id = file_data.get('id', '')
@@ -527,6 +498,9 @@ def get_citation_source_from_tool_result(
             ]
 
         elif tool_name in ('search_knowledge_files', 'query_chat_files'):
+            if not isinstance(tool_result, list):
+                return []
+
             chunks = tool_result
 
             # Group chunks by source for better citation display
@@ -907,7 +881,11 @@ def handle_responses_streaming_event(
                     idx
                     for idx, existing in enumerate(new_output)
                     if (item.get('id') and existing.get('id') == item.get('id'))
-                    or (item.get('call_id') and existing.get('call_id') == item.get('call_id'))
+                    or (
+                        item.get('call_id')
+                        and existing.get('type') == item.get('type')
+                        and existing.get('call_id') == item.get('call_id')
+                    )
                 ),
                 None,
             )
@@ -2093,6 +2071,12 @@ async def chat_image_generation_handler(
     if not chat_id or not isinstance(chat_id, str) or not __event_emitter__:
         return form_data
 
+    is_channel_chat = chat_id.startswith('channel:')
+    image_metadata = {
+        'message_id': metadata.get('message_id', None),
+        **({'channel_id': chat_id.removeprefix('channel:')} if is_channel_chat else {'chat_id': chat_id}),
+    }
+
     if not is_saved_chat_id(chat_id):
         message_list = form_data.get('messages', [])
     else:
@@ -2137,10 +2121,7 @@ async def chat_image_generation_handler(
             images = await image_edits(
                 request=request,
                 form_data=EditImageForm(**{'prompt': prompt, 'image': input_images}),
-                metadata={
-                    'chat_id': metadata.get('chat_id', None),
-                    'message_id': metadata.get('message_id', None),
-                },
+                metadata=image_metadata,
                 user=user,
             )
 
@@ -2158,7 +2139,7 @@ async def chat_image_generation_handler(
                         'files': [
                             {
                                 'type': 'image',
-                                'url': image['url'],
+                                **image,
                             }
                             for image in images
                         ]
@@ -2248,10 +2229,7 @@ async def chat_image_generation_handler(
             images = await image_generations(
                 request=request,
                 form_data=CreateImageForm(**{'prompt': prompt}),
-                metadata={
-                    'chat_id': metadata.get('chat_id', None),
-                    'message_id': metadata.get('message_id', None),
-                },
+                metadata=image_metadata,
                 user=user,
             )
 
@@ -2269,7 +2247,7 @@ async def chat_image_generation_handler(
                         'files': [
                             {
                                 'type': 'image',
-                                'url': image['url'],
+                                **image,
                             }
                             for image in images
                         ]
@@ -2669,7 +2647,8 @@ def sanitize_tool_pairs(messages: list[dict]) -> list[dict]:
     return sanitized
 
 
-SKILL_MENTION_RE = re.compile(r'<(?:\$([^|>]+)(?:\|[^>]*)?|/([^|>]+)\|[^>]*)>')
+# Ids are validated as [a-z0-9_-]+ on create; matching that keeps ordinary "<$..." text intact.
+SKILL_MENTION_RE = re.compile(r'<(?:\$([a-z0-9_-]+)(?:\|[^>]*)?|/([a-z0-9_-]+)\|[^>]*)>')
 
 
 def _get_text_parts(message: dict) -> list[str]:
@@ -2693,7 +2672,7 @@ def extract_skill_ids_from_messages(messages: list[dict]) -> set[str]:
     return ids
 
 
-SKILL_MENTION_STRIP_RE = re.compile(r'<(?:\$[^|>]+(?:\|([^>]*))?|/[^|>]+\|([^>]*))>')
+SKILL_MENTION_STRIP_RE = re.compile(r'<(?:\$[a-z0-9_-]+(?:\|([^>]*))?|/[a-z0-9_-]+\|([^>]*))>')
 
 
 def strip_skill_mentions(messages: list[dict]) -> None:
@@ -2813,7 +2792,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             form_data['model'] = selected_model_id
             metadata['selected_model_id'] = selected_model_id
 
-    # Captured before apply_params_to_form_data pops 'params'; feeds metadata['system_prompt'] below
+    # Captured before apply_params_to_form_data pops 'params'; populates metadata['system_prompt'] below
     model_system_prompt = (form_data.get('params') or {}).get('system')
 
     form_data = apply_params_to_form_data(form_data, model)
@@ -3044,13 +3023,15 @@ async def process_chat_payload(request, form_data, user, metadata, model):
     except Exception as e:
         raise e
 
+    filter_functions = []
+    filter_context = get_filter_context(request) if ENABLE_PLUGINS else None
     if ENABLE_PLUGINS:
         try:
             filter_functions = await get_filter_functions(request, model, metadata.get('filter_ids', []))
 
             form_data, flags = await process_filter_functions(
                 request=request,
-                filter_context=None,
+                filter_context=filter_context,
                 filter_functions=filter_functions,
                 filter_type='inlet',
                 form_data=form_data,
@@ -3532,13 +3513,20 @@ async def process_chat_payload(request, form_data, user, metadata, model):
             }
         )
 
-    # Strip empty text content blocks from multimodal messages
-    # to prevent errors from providers like Gemini and Claude
-    form_data['messages'] = strip_empty_content_blocks(form_data.get('messages', []))
+    if ENABLE_PLUGINS:
+        try:
+            form_data, _ = await process_filter_functions(
+                request=request,
+                filter_context=filter_context,
+                filter_functions=filter_functions,
+                filter_type='request',
+                form_data=form_data,
+                extra_params=extra_params,
+            )
+        except Exception as e:
+            raise Exception(f'{e}')
 
-    # Merge any duplicate system messages into a single message at position 0
-    # to prevent template parsing errors with strict chat templates (e.g. Qwen)
-    form_data['messages'] = merge_system_messages(form_data.get('messages', []))
+    form_data = normalize_messages_for_model(form_data)
 
     return form_data, metadata, events
 
@@ -3563,6 +3551,15 @@ async def get_event_emitter_and_caller(metadata):
 
 async def build_chat_response_context(request, form_data, user, model, metadata, tasks, events):
     event_emitter, event_caller = await get_event_emitter_and_caller(metadata)
+    assistant_message = None
+    if metadata.get('assistant_message_id'):
+        # Preserve the original output before request conversion strips it from temporary chats.
+        if is_saved_chat_id(metadata.get('chat_id')):
+            assistant_message = await Chats.get_message_by_id_and_message_id(
+                metadata['chat_id'], metadata['assistant_message_id']
+            )
+        elif form_data.get('messages') and form_data['messages'][-1].get('role') == 'assistant':
+            assistant_message = form_data['messages'][-1]
     return {
         'request': request,
         'form_data': form_data,
@@ -3573,6 +3570,7 @@ async def build_chat_response_context(request, form_data, user, model, metadata,
         'events': events,
         'event_emitter': event_emitter,
         'event_caller': event_caller,
+        'assistant_message': copy.deepcopy(assistant_message),
     }
 
 
@@ -3664,10 +3662,12 @@ async def execute_tool_call_for_output(request, form_data, user, metadata, event
 
 async def drain_approved_tool_calls(request, form_data, user, model, metadata) -> bool:
     chat_id = metadata.get('chat_id')
-    message_id = metadata.get('message_id') or metadata.get('assistant_message_id')
-    if not is_saved_chat_id(chat_id) or not message_id:
+    assistant_message_id = metadata.get('assistant_message_id')
+    # Only a resume/continue payload re-enters an existing message; other paths mint a fresh id with nothing to drain.
+    if not is_saved_chat_id(chat_id) or not assistant_message_id:
         return False
 
+    message_id = metadata.get('message_id') or assistant_message_id
     message = await Chats.get_message_by_id_and_message_id(chat_id, message_id)
     output = message.get('output') if message else None
     if not isinstance(output, list):
@@ -3826,6 +3826,34 @@ async def drain_approved_tool_calls(request, form_data, user, model, metadata) -
                 reasoning_format=get_reasoning_format(model),
             )
             form_data['messages'] = sanitize_tool_pairs(form_data['messages'])
+
+        if not paused and ENABLE_PLUGINS:
+            filter_functions = await get_filter_functions(request, model, metadata.get('filter_ids', []))
+            if filter_functions:
+                filtered_form_data, _ = await process_filter_functions(
+                    request=request,
+                    filter_context=get_filter_context(request),
+                    filter_functions=filter_functions,
+                    filter_type='request',
+                    form_data=form_data,
+                    extra_params={
+                        '__event_emitter__': event_emitter,
+                        '__event_call__': event_caller,
+                        '__user__': user.model_dump() if isinstance(user, UserModel) else {},
+                        '__metadata__': metadata,
+                        '__oauth_token__': await get_system_oauth_token(request, user),
+                        '__request__': request,
+                        '__model__': model,
+                        '__chat_id__': metadata.get('chat_id'),
+                        '__message_id__': metadata.get('message_id'),
+                    },
+                )
+                if filtered_form_data is not form_data:
+                    form_data.clear()
+                    form_data.update(filtered_form_data)
+
+        if not paused:
+            normalize_messages_for_model(form_data)
 
         return paused
 
@@ -4463,6 +4491,7 @@ async def non_streaming_chat_response_handler(response, ctx):
 
     chat_id = metadata.get('chat_id') or ''
     save_to_chat = is_saved_chat_id(chat_id)
+    continuing = bool(metadata.get('assistant_message_id'))
 
     if event_emitter:
         try:
@@ -4506,21 +4535,24 @@ async def non_streaming_chat_response_handler(response, ctx):
             response_output = response_data.get('output')
             content = choices[0].get('message', {}).get('content') if choices else ''
 
-            if choices and (content or response_output):
-                if content or response_output:
-                    await event_emitter(
-                        {
-                            'type': 'chat:completion',
-                            'data': response_data,
-                        }
-                    )
+            if (continuing and 'error' not in response_data) or (
+                not continuing and choices and (content or response_output)
+            ):
+                if content or response_output or continuing:
+                    if not continuing:
+                        await event_emitter(
+                            {
+                                'type': 'chat:completion',
+                                'data': response_data,
+                            }
+                        )
 
                     title = await Chats.get_chat_title_by_id(metadata['chat_id']) if save_to_chat else ''
 
                     # Use output from backend if provided (OR-compliant backends),
                     # otherwise generate from response content
                     if not response_output:
-                        choice_message = choices[0].get('message', {})
+                        choice_message = choices[0].get('message', {}) if choices else {}
                         reasoning_content = choice_message.get('reasoning_content') or choice_message.get('reasoning')
                         reasoning_details = get_reasoning_details(choice_message)
                         response_output = []
@@ -4556,10 +4588,41 @@ async def non_streaming_chat_response_handler(response, ctx):
                             }
                         )
 
+                    if continuing:
+                        message = ctx.get('assistant_message') or {}
+                        previous = message.get('output') or []
+                        if not previous and message.get('content'):
+                            previous = [
+                                {
+                                    'type': 'message',
+                                    'id': message.get('id') or output_id('msg'),
+                                    'role': 'assistant',
+                                    'content': [{'type': 'output_text', 'text': message['content']}],
+                                }
+                            ]
+                        response_output = list(response_output)
+                        if (
+                            previous
+                            and response_output
+                            and previous[-1].get('type') == response_output[0].get('type') == 'message'
+                            and previous[-1].get('role', 'assistant') == 'assistant'
+                            and response_output[0].get('role', 'assistant') == 'assistant'
+                        ):
+                            response_output[0] = {
+                                **previous[-1],
+                                **response_output[0],
+                                'id': previous[-1].get('id'),
+                                'content': [*previous[-1].get('content', []), *response_output[0].get('content', [])],
+                            }
+                            previous = previous[:-1]
+                        response_output = previous + response_output
+                        content = get_output_text(response_output)
+
                     await event_emitter(
                         {
                             'type': 'chat:completion',
                             'data': {
+                                **(response_data if continuing else {}),
                                 'done': True,
                                 'output': response_output,
                                 'title': title,
@@ -4653,6 +4716,7 @@ async def streaming_chat_response_handler(response, ctx):
     event_caller = ctx['event_caller']
     chat_id = metadata.get('chat_id') or ''
     save_to_chat = is_saved_chat_id(chat_id)
+    continuing = bool(metadata.get('assistant_message_id'))
 
     extra_params = {
         '__event_emitter__': event_emitter,
@@ -4662,6 +4726,8 @@ async def streaming_chat_response_handler(response, ctx):
         '__oauth_token__': await get_system_oauth_token(request, user),
         '__request__': request,
         '__model__': model,
+        '__chat_id__': metadata.get('chat_id'),
+        '__message_id__': metadata.get('message_id'),
     }
 
     filter_functions = (
@@ -4968,9 +5034,13 @@ async def streaming_chat_response_handler(response, ctx):
                 return output, end_flag
 
             message = (
-                await Chats.get_message_by_id_and_message_id(metadata['chat_id'], metadata['message_id'])
-                if save_to_chat
-                else None
+                ctx.get('assistant_message')
+                if continuing
+                else (
+                    await Chats.get_message_by_id_and_message_id(metadata['chat_id'], metadata['message_id'])
+                    if save_to_chat
+                    else None
+                )
             )
 
             tool_calls = []
@@ -4998,7 +5068,7 @@ async def streaming_chat_response_handler(response, ctx):
                     and prior_output[-1].get('status') == 'in_progress'
                 ):
                     msg_parts = prior_output[-1].get('content', [])
-                    if not msg_parts or (len(msg_parts) == 1 and not msg_parts[0].get('text', '').strip()):
+                    if not msg_parts or (len(msg_parts) == 1 and not msg_parts[0].get('text', '')):
                         prior_output.pop()
                 output = []
                 content_parts = []
@@ -5019,10 +5089,33 @@ async def streaming_chat_response_handler(response, ctx):
                 else:
                     output = []
 
+            if continuing and not prior_output:
+                # Keep the prefix separate from provider output indices and tool follow-up messages.
+                prior_output, output = output, []
+                content_parts = []
+
             usage = None
             last_response_id = None
 
             def full_output():
+                if (
+                    continuing
+                    and prior_output
+                    and output
+                    and prior_output[-1].get('type') == output[0].get('type') == 'message'
+                    and prior_output[-1].get('role', 'assistant') == 'assistant'
+                    and output[0].get('role', 'assistant') == 'assistant'
+                ):
+                    return [
+                        *prior_output[:-1],
+                        {
+                            **prior_output[-1],
+                            **output[0],
+                            'id': prior_output[-1].get('id'),
+                            'content': [*prior_output[-1].get('content', []), *output[0].get('content', [])],
+                        },
+                        *output[1:],
+                    ]
                 return prior_output + output if prior_output else output
 
             def get_message_error_content(error):
@@ -5138,7 +5231,9 @@ async def streaming_chat_response_handler(response, ctx):
                             response_stream_task_id,
                             chat_id,
                             metadata.get('message_id'),
-                            joined_content or get_output_text(current_stream_output),
+                            get_output_text(current_stream_output)
+                            if continuing
+                            else joined_content or get_output_text(current_stream_output),
                             current_stream_output,
                         )
 
@@ -5171,8 +5266,10 @@ async def streaming_chat_response_handler(response, ctx):
                         if delta_count >= threshold and last_delta_data:
                             await event_emitter(
                                 {
-                                    'type': 'response:completion',
-                                    'data': last_delta_data,
+                                    'type': 'chat:completion' if continuing else 'response:completion',
+                                    'data': {'output': full_output(), 'type': last_delta_data.get('type')}
+                                    if continuing
+                                    else last_delta_data,
                                 }
                             )
                             await save_current_response_stream()
@@ -5221,8 +5318,10 @@ async def streaming_chat_response_handler(response, ctx):
                         await flush_pending_delta_data()
                         await event_emitter(
                             {
-                                'type': 'response:completion',
-                                'data': get_response_completion_event_data(response_data),
+                                'type': 'chat:completion' if continuing else 'response:completion',
+                                'data': {'output': full_output()}
+                                if continuing
+                                else get_response_completion_event_data(response_data),
                             }
                         )
                         await save_current_response_stream(stream_output)
@@ -5476,7 +5575,8 @@ async def streaming_chat_response_handler(response, ctx):
                                                 if current_response_tool_call is None:
                                                     # Add the new tool call
                                                     delta_tool_call.setdefault('function', {})
-                                                    delta_tool_call['function'].setdefault('name', '')
+                                                    if delta_tool_call['function'].get('name') is None:
+                                                        delta_tool_call['function']['name'] = ''
                                                     delta_tool_call['id'] = delta_tool_call.get('id') or output_id('fc')
                                                     delta_arguments = delta_tool_call['function'].get('arguments')
                                                     if not isinstance(delta_arguments, str):
@@ -5707,7 +5807,12 @@ async def streaming_chat_response_handler(response, ctx):
                                                 reasoning_detail_items,
                                             )
                                             await save_current_response_stream()
-                                            data = None
+                                            # Providers such as OpenRouter send reasoning_details
+                                            # alongside the reasoning text: only drop the event when
+                                            # the details were all there was to report, otherwise the
+                                            # reasoning delta never reaches the client.
+                                            if not reasoning_content:
+                                                data = None
 
                                     if value:
                                         if (
@@ -5906,7 +6011,7 @@ async def streaming_chat_response_handler(response, ctx):
 
                     if output:
                         # Clean up the last message item
-                        if output[-1].get('type') == 'message':
+                        if output[-1].get('type') == 'message' and not continuing:
                             parts = output[-1].get('content', [])
                             if parts and parts[-1].get('type') == 'output_text':
                                 parts[-1]['text'] = parts[-1]['text'].strip()
@@ -6030,12 +6135,14 @@ async def streaming_chat_response_handler(response, ctx):
                     tool_call_iterations += 1
 
                     response_tool_calls = tool_calls.pop(0)
-                    ask_user_stage = stage_ask_user_tool_call(response_tool_calls, output, output_id)
-                    if ask_user_stage:
-                        if ask_user_stage['error']:
-                            await event_emitter({'type': 'chat:completion', 'data': {'output': full_output()}})
-                            continue
-
+                    ask_user_staged, ask_user_error = stage_ask_user_tool_calls(response_tool_calls, output, output_id)
+                    if ask_user_error:
+                        response_tool_calls = [
+                            tool_call
+                            for tool_call in response_tool_calls
+                            if tool_call.get('function', {}).get('name') != 'ask_user'
+                        ]
+                    elif ask_user_staged:
                         if is_saved_chat_id(metadata.get('chat_id')) and metadata.get('message_id'):
                             await pause_for_tool_approval(
                                 metadata['chat_id'],
@@ -6071,7 +6178,8 @@ async def streaming_chat_response_handler(response, ctx):
 
                     tool_approval_mode = metadata.get('params', {}).get('tool_approval_mode', 'full')
                     if (
-                        tool_approval_mode == 'ask'
+                        response_tool_calls
+                        and tool_approval_mode == 'ask'
                         and is_saved_chat_id(metadata.get('chat_id'))
                         and metadata.get('message_id')
                     ):
@@ -6225,7 +6333,6 @@ async def streaming_chat_response_handler(response, ctx):
                             citations_enabled
                             and tool_function_name
                             in [
-                                'search_web',
                                 'fetch_url',
                                 'view_file',
                                 'view_knowledge_file',
@@ -6299,17 +6406,6 @@ async def streaming_chat_response_handler(response, ctx):
                                 item['status'] = result_status_by_call_id.get(call_id, 'completed')
                                 item['arguments'] = tc.get('function', {}).get('arguments', '{}')
                                 break
-
-                    # Append a new empty message item for the next response
-                    output.append(
-                        {
-                            'type': 'message',
-                            'id': output_id('msg'),
-                            'status': 'in_progress',
-                            'role': 'assistant',
-                            'content': [{'type': 'output_text', 'text': ''}],
-                        }
-                    )
 
                     # Emit citation sources to the frontend for display
                     if citations_enabled:
@@ -6457,6 +6553,18 @@ async def streaming_chat_response_handler(response, ctx):
                                     }
                                 )
 
+                        if filter_functions:
+                            new_form_data, _ = await process_filter_functions(
+                                request=request,
+                                filter_context=filter_context,
+                                filter_functions=filter_functions,
+                                filter_type='request',
+                                form_data=new_form_data,
+                                extra_params=extra_params,
+                            )
+
+                        new_form_data = normalize_messages_for_model(new_form_data)
+
                         res = await generate_chat_completion(
                             request,
                             new_form_data,
@@ -6487,7 +6595,7 @@ async def streaming_chat_response_handler(response, ctx):
                                     prior_output.pop()
                             output = []
                             await stream_body_handler(res, new_form_data)
-                            output[:0] = prior_output
+                            output = full_output()
                             prior_output = []
                         elif getattr(res, 'status_code', 200) >= 400:
                             await emit_message_error(get_message_error_content(get_response_error_detail(res)))
@@ -6678,6 +6786,18 @@ async def streaming_chat_response_handler(response, ctx):
                                     ),
                                 ],
                             }
+
+                            if filter_functions:
+                                new_form_data, _ = await process_filter_functions(
+                                    request=request,
+                                    filter_context=filter_context,
+                                    filter_functions=filter_functions,
+                                    filter_type='request',
+                                    form_data=new_form_data,
+                                    extra_params=extra_params,
+                                )
+
+                            new_form_data = normalize_messages_for_model(new_form_data)
 
                             res = await generate_chat_completion(
                                 request,
@@ -7028,7 +7148,12 @@ async def streaming_chat_response_handler(response, ctx):
 
                 await clear_response_stream(request.app.state.redis, response_stream_task_id)
                 await publish_chat_finished_event(
-                    request, user, metadata, title, ''.join(content_parts), current_output
+                    request,
+                    user,
+                    metadata,
+                    title,
+                    get_output_text(current_output) if continuing else ''.join(content_parts),
+                    current_output,
                 )
 
                 await event_emitter(
@@ -7039,7 +7164,9 @@ async def streaming_chat_response_handler(response, ctx):
                 )
 
                 ctx['assistant_message'] = {
-                    'content': ''.join(content_parts) or get_output_text(current_output),
+                    'content': get_output_text(current_output)
+                    if continuing
+                    else ''.join(content_parts) or get_output_text(current_output),
                     'output': current_output,
                     **({'usage': usage} if usage else {}),
                 }
