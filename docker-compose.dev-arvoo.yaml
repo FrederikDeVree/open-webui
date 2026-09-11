@@ -39,6 +39,7 @@ services:
       - 'SMTP_USE_TLS=${SMTP_USE_TLS}'
       - 'SMTP_USE_SSL=${SMTP_USE_SSL}'
       - 'FEEDBACK_NOTIFICATION_EMAIL=${FEEDBACK_NOTIFICATION_EMAIL}'
+      - 'ENABLE_CONTEXT_COMPACTION=True'
 
     extra_hosts:
       - host.docker.internal:host-gateway
